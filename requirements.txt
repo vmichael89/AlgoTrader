@@ -1,0 +1,10 @@
+# General
+numpy
+pandas
+matplotlib
+plotly
+dash
+
+# Oanda
+v20
+git+https://github.com/yhilpisch/tpqoa
