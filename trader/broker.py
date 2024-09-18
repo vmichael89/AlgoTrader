@@ -5,6 +5,10 @@ import threading
 import pandas as pd
 import tpqoa
 
+import json
+import requests
+
+import configparser
 
 # Inherit standard api class to change streaming behavior
 class OandaAPI(tpqoa.tpqoa):
@@ -137,3 +141,49 @@ class OandaBroker(Broker):
 
     def stream_data(self, instrument):
         self.api.stream_data(instrument)
+
+class PolygonAPI():
+    def __init__(self):
+        with open(Path('.') / 'config' / 'polygon.cfg', 'r') as f:
+            self.API_KEY = f.read()
+
+    def get_data(self, instruments, start, end, granulartiy, timezone="new york"):
+        headers = {"Authorization": "Bearer " + self.API_KEY}
+
+        datas = {}
+
+        for instrument in instruments:
+            print(f"Fetching data for {instrument}")
+
+            data = []
+
+            url = f'https://api.polygon.io/v2/aggs/ticker/{instrument}/range/{granulartiy[0]}/{granulartiy[1]}/{start}/{end}?adjusted=true&sort=asc&limit=50000&apiKey={self.API_KEY}'
+            while True:
+                aggs = json.loads(requests.get(url, headers=headers).text)
+
+                if aggs["resultsCount"] == 0:
+                    break
+
+                data.extend(aggs['results'])
+
+                if "next_url" in aggs:
+                    url = aggs["next_url"]
+                else:
+                    break
+
+            df = pd.DataFrame(data)
+
+            df.drop(columns=['vw', 'n'], inplace=True)
+            df.rename(columns={'o': 'Open', 'c': 'Close', 'h': 'High', 'l': 'Low', 'v': 'Volume', 't': 'Date'},
+                      inplace=True)
+            df['Date'] = pd.to_datetime(df['Date'], unit='ms')
+            df.set_index('Date', inplace=True)
+
+            if timezone=="new york":
+                df.index = df.index.tz_localize('UTC')
+                df.index = df.index.tz_convert('America/New_York')
+                df.index = df.index.tz_localize(None)
+
+            datas[instrument] = df
+
+        return datas
