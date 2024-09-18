@@ -147,7 +147,7 @@ class PolygonAPI():
         with open(Path('.') / 'config' / 'polygon.cfg', 'r') as f:
             self.API_KEY = f.read()
 
-    def get_data(self, instruments, start, end, granulartiy, timezone="new york"):
+    def get_data(self, instruments, start, end, granularity, timezone="new york"):
         headers = {"Authorization": "Bearer " + self.API_KEY}
 
         datas = {}
@@ -157,7 +157,7 @@ class PolygonAPI():
 
             data = []
 
-            url = f'https://api.polygon.io/v2/aggs/ticker/{instrument}/range/{granulartiy[0]}/{granulartiy[1]}/{start}/{end}?adjusted=true&sort=asc&limit=50000&apiKey={self.API_KEY}'
+            url = f'https://api.polygon.io/v2/aggs/ticker/{instrument}/range/{granularity[0]}/{granularity[1]}/{start}/{end}?adjusted=true&sort=asc&limit=50000&apiKey={self.API_KEY}'
             while True:
                 aggs = json.loads(requests.get(url, headers=headers).text)
 
@@ -174,10 +174,10 @@ class PolygonAPI():
             df = pd.DataFrame(data)
 
             df.drop(columns=['vw', 'n'], inplace=True)
-            df.rename(columns={'o': 'Open', 'c': 'Close', 'h': 'High', 'l': 'Low', 'v': 'Volume', 't': 'Date'},
+            df.rename(columns={'o': 'open', 'c': 'close', 'h': 'high', 'l': 'low', 'v': 'volume', 't': 'date'},
                       inplace=True)
-            df['Date'] = pd.to_datetime(df['Date'], unit='ms')
-            df.set_index('Date', inplace=True)
+            df['date'] = pd.to_datetime(df['date'], unit='ms')
+            df.set_index('date', inplace=True)
 
             if timezone=="new york":
                 df.index = df.index.tz_localize('UTC')
@@ -187,3 +187,7 @@ class PolygonAPI():
             datas[instrument] = df
 
         return datas
+#
+# api = PolygonAPI()
+#
+# print(api.get_data(["C:EURUSD"], '2024-08-18', '2024-09-18', ['1','hour']))
