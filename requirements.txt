@@ -5,6 +5,9 @@ matplotlib
 plotly
 dash
 
+# Backtrader
+backtrader
+
 # Oanda
 v20
 git+https://github.com/yhilpisch/tpqoa
