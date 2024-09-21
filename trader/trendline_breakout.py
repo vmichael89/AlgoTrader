@@ -2,6 +2,9 @@ from algos.trendline_automation import fit_trendlines_single
 import pandas_ta as ta
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
+from algos.directional_change import DirectionalChange
+
 
 def trendline_breakout_dataset(
         ohlcv: pd.DataFrame, lookback: int,
@@ -90,6 +93,4 @@ def trendline_breakout_dataset(
     data_y = pd.Series(0, index=trades.index)
     data_y.loc[trades['return'] > 0] = 1
 
-    data = pd.concat([data_x, data_y.rename('label')], axis=1)
-
-    return trades, data
+    return trades, data_x, data_y
