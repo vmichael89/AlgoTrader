@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 from trendline_breakout import trendline_breakout_dataset
 from sklearn.ensemble import RandomForestClassifier
 from broker import PolygonAPI
+from broker import OandaBroker
 
 
 def walkforward_model(
@@ -70,79 +71,74 @@ def walkforward_model(
 
 
 if __name__ == '__main__':
-    api = PolygonAPI()
-    instruments = ["X:BTCUSD"]
+    # api = PolygonAPI()
+    # instruments = ["X:BTCUSD"]
     start = '2018-01-01'
     end = '2023-01-01'
-    granularity = ['1', 'hour']
-
-    data_1 = api.get_data(instruments, start, end, granularity)["X:BTCUSD"]
-    data_1.reset_index(inplace=True)
+    # granularity = ['1', 'hour']
+    #
+    # data_1 = api.get_data(instruments, start, end, granularity)["X:BTCUSD"]
+    # data_1.reset_index(inplace=True)
     data_2 = pd.read_csv('../data/BTCUSDT3600.csv')
 
-    # points = []
-    # close = data_1['close'].to_numpy()
-    # for i in range(len(data_1)):
-    #     points.append(close[i])
-    #
-    # plt.plot(points)
-    # plt.show()
+    api = OandaBroker()
 
-    plt.plot(data_1['close'], color='red', label='my data')
-    plt.plot(data_2['close'], color='green', label='neurotrader data')
+    data = api.get_data(api.instruments.BTC_USD, start, end, 'H1', 'M', log=True)[0].df
 
-    print(len(data_1), len(data_2))
+    data.reset_index(inplace=True)
 
+    data.rename(columns={'time': 'date'}, inplace=True)
+
+    data['date'] = data['date'].dt.tz_localize(None)
+
+    data['date'] = data['date'].astype('datetime64[s]')
+    data = data.set_index('date')
+    data = data.dropna()
+
+    trades, data_x, data_y = trendline_breakout_dataset(data, 72)
+    signal, prob = walkforward_model(
+        np.log(data['close']).to_numpy(),
+        trades, data_x, data_y,
+        365 * 24 * 2, 365 * 24
+    )
+
+    # print(trades)
+
+    data['sig'] = signal
+
+    # dumb_sig takes every trade, no ML filter
+    data['dumb_sig'] = prob
+    data.loc[data['dumb_sig'] > 0, 'dumb_sig'] = 1
+
+    data = data[data.index > '2020-01-01']
+    data['r'] = np.log(data['close']).diff().shift(-1)
+
+    # Compute trade stats for all trades vs. model's selected trades
+    trades = trades.dropna()
+    all_r = trades['return']
+    mod_r = trades[trades['model_prob'] > 0.5]['return']
+
+    no_filter_rets = data['r'] * data['dumb_sig']
+    filter_rets = data['r'] * data['sig']
+
+
+    def prof_factor(rets):
+        return rets[rets > 0].sum() / rets[rets < 0].abs().sum()
+
+
+    print("All Trades PF", prof_factor(no_filter_rets))
+    print("All Trades Avg", all_r.mean())
+    print("All Trades Win Rate", len(all_r[all_r > 0]) / len(all_r))
+    print("All Trades Time In Market", len(data[data['dumb_sig'] > 0]) / len(data))
+
+    print("Meta-Label Trades PF", prof_factor(filter_rets))
+    print("Meta-Label Trades Avg", mod_r.mean())
+    print("Meta-Label Trades Win Rate", len(mod_r[mod_r > 0]) / len(mod_r))
+    print("Meta-Label Time In Market", len(data[data['sig'] > 0]) / len(data))
+
+    plt.style.use('dark_background')
+    (data['r'] * data['sig']).cumsum().plot(label='Meta-Labeled')
+    (data['r'] * data['dumb_sig']).cumsum().plot(label='All Trades')
+    (data['r']).cumsum().plot(label='Buy Hold')
+    plt.legend()
     plt.show()
-
-    # data['date'] = data['date'].astype('datetime64[s]')
-    # data = data.set_index('date')
-    # data = data.dropna()
-    #
-    # trades, data_x, data_y = trendline_breakout_dataset(data, 72)
-    # signal, prob = walkforward_model(
-    #     np.log(data['close']).to_numpy(),
-    #     trades, data_x, data_y,
-    #     365 * 24 * 2, 365 * 24
-    # )
-    #
-    # # print(trades)
-    #
-    # data['sig'] = signal
-    #
-    # # dumb_sig takes every trade, no ML filter
-    # data['dumb_sig'] = prob
-    # data.loc[data['dumb_sig'] > 0, 'dumb_sig'] = 1
-    #
-    # data = data[data.index > '2020-01-01']
-    # data['r'] = np.log(data['close']).diff().shift(-1)
-    #
-    # # Compute trade stats for all trades vs. model's selected trades
-    # trades = trades.dropna()
-    # all_r = trades['return']
-    # mod_r = trades[trades['model_prob'] > 0.5]['return']
-    #
-    # no_filter_rets = data['r'] * data['dumb_sig']
-    # filter_rets = data['r'] * data['sig']
-    #
-    #
-    # def prof_factor(rets):
-    #     return rets[rets > 0].sum() / rets[rets < 0].abs().sum()
-    #
-    #
-    # print("All Trades PF", prof_factor(no_filter_rets))
-    # print("All Trades Avg", all_r.mean())
-    # print("All Trades Win Rate", len(all_r[all_r > 0]) / len(all_r))
-    # print("All Trades Time In Market", len(data[data['dumb_sig'] > 0]) / len(data))
-    #
-    # print("Meta-Label Trades PF", prof_factor(filter_rets))
-    # print("Meta-Label Trades Avg", mod_r.mean())
-    # print("Meta-Label Trades Win Rate", len(mod_r[mod_r > 0]) / len(mod_r))
-    # print("Meta-Label Time In Market", len(data[data['sig'] > 0]) / len(data))
-    #
-    # plt.style.use('dark_background')
-    # (data['r'] * data['sig']).cumsum().plot(label='Meta-Labeled')
-    # (data['r'] * data['dumb_sig']).cumsum().plot(label='All Trades')
-    # (data['r']).cumsum().plot(label='Buy Hold')
-    # plt.legend()
-    # plt.show()

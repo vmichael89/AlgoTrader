@@ -130,7 +130,7 @@ class OandaBroker(Broker):
 
             # Rename columns
             df_data = df_data.rename(
-                columns={'o': 'open', 'h': 'high', 'l': 'low', 'c': 'close', 'volume': 'Volume'}
+                columns={'o': 'open', 'h': 'high', 'l': 'low', 'c': 'close', 'volume': 'volume'}
             )
 
             data = Data(instr, start, end, granularity, price, df_data)
