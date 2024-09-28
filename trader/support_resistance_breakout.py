@@ -1,31 +1,30 @@
-import os
 from algos.directional_change import DirectionalChange
 from broker import PolygonAPI
 import pandas as pd
 import numpy as np
 import pandas_ta as ta
-
-
-# Define the assign_to_zone function
-def assign_to_zone(price, zones):
-    for i in range(len(zones) - 1):
-        if zones[i] <= price <= zones[i + 1]:
-            return (zones[i], zones[i + 1])
-
-    return (None, None)
-
+import matplotlib.pyplot as plt
 
 # Define the main function
-def support_and_resistance_rejection(df: pd.DataFrame, min_touches_sr=2, lookback: int = 240, atr_lookback: int = 168, hold_period=48,
-                                     tp_mult: float = 3.0, sl_mult: float = 3.0):
-    # ohlcv = ohlcv.reset_index()  # Reset the index
-    df = df.copy()
+def support_and_resistance_rejection(ohlcv: pd.DataFrame, lookback: int = 240, atr_lookback: int = 168, hold_period = 48, confirmation_wait:int=12,
+                                     tp_mult : float=3.0, sl_mult : float=3.0, plot_graphs : bool = False, sigma : float = 0.0025,
+                                     min_bounces : int = 2, zone_size : float = 0.002, rsi_lookback : int = 48, rsi_min : float = 0,
+                                     confirmation_mult: float=1.0, atr_min : float = 0.001):
+    ohlcv = ohlcv.reset_index()  # Reset the index
 
-    numeric_cols = df.select_dtypes(include=[np.number]).columns
-    df[numeric_cols] = np.log(df[numeric_cols])
+    numeric_cols = ohlcv.select_dtypes(include=[np.number]).columns
+    ohlcv[numeric_cols] = np.log(ohlcv[numeric_cols])
+
+    close = ohlcv['close'].to_numpy()
 
     # Calculate ATR
-    df['atr'] = ta.atr(df['high'], df['low'], df['close'], atr_lookback)
+    atr_arr = ta.atr(ohlcv['high'], ohlcv['low'],ohlcv['close'], atr_lookback)
+    atr_arr = atr_arr.to_numpy()
+
+    np.set_printoptions(threshold=np.inf)
+
+    rsi_atr = ta.rsi(ohlcv['close'], rsi_lookback)
+    rsi_atr = rsi_atr.to_numpy()
 
     trades = pd.DataFrame()
     trade_i = 0
@@ -35,174 +34,194 @@ def support_and_resistance_rejection(df: pd.DataFrame, min_touches_sr=2, lookbac
     sl_price = None
     hp_i = None
 
-    for window in df.rolling(window=lookback):
-        window = window.copy()  # will otherwise trigger a pandas warning not to operate on a view
+    directional_change = DirectionalChange(sigma=sigma)
 
-        current_timestamp = window.index[-1]
-        i = df.index.get_loc(window.index[-1])
+    # ohlcv_modified = ohlcv.copy()
+    # ohlcv_modified['high'] = ohlcv_modified['close']
+    # ohlcv_modified['low'] = ohlcv_modified['close']
+    extremes_df = directional_change.get_extremes(ohlcv)
+    all_extremes = extremes_df.extremes
 
-        if i < lookback:
-            continue  # wait until window has it's full length, i.e. len(window)=lookback
+    print(extremes_df.extremes)
 
-        current_close = window.iloc[-1].close
-        current_atr = window.iloc[-1].atr
+    zone_bounds_plotting = {}
+    extremes_in_zone_plotting = {}
 
-        price_min = window['extreme'].min()
-        price_max = window['extreme'].max()
-        zone_size = 0.002
+    for i in range(lookback, len(ohlcv)):
+        extremes = all_extremes.loc[(all_extremes['conf_time'] <= i) & (all_extremes.index >= i - lookback)].copy()
 
-        zones = np.arange(price_min, price_max + zone_size, zone_size)
-        current_zone = assign_to_zone(current_close, zones)
+        current_zone = (close[i] - zone_size/2, close[i] + zone_size/2)
 
-        window['assigned_zone'] = window['extreme'].apply(lambda x: assign_to_zone(x, zones))
-        # tuples of (zone_begin, zone_end) or (None, None) if not in any zone
+        extremes_in_zone = extremes[(extremes['extreme'].apply(lambda z: current_zone[0] <= z <= current_zone[1]))]
 
-        count_extremes_in_zone = window['assigned_zone'].value_counts().get(current_zone, 0)
-        # returns 0 if zone tuple was not found
+        count_extremes_in_zone = len(extremes_in_zone)
 
-        if not in_trade and count_extremes_in_zone >= min_touches_sr:
-
-            # 1 is from top, 0 is from bottom
+        if not in_trade and count_extremes_in_zone >= min_bounces and atr_arr[i] > atr_min:
+            #1 is from top, 0 is from bottom
             entry_direction = None
-            # Iterate BACKWARDS over rows within the window
-            for _, row in window.iloc[::-1].iterrows():
-                if current_zone == (None, None):
-                    continue  # would otherwise throw an error at row['close'] > None
-                if row['close'] > current_zone[1]:
+            for j in range(i, i - lookback, -1):
+                if close[j] > current_zone[1]:
                     entry_direction = 1
-                    break  # exits when direction is evaluated
-                elif row['close'] < current_zone[0]:
+                    break
+                elif close[j] < current_zone[0]:
                     entry_direction = 0
-                    break  # exits when direction is evaluated
+                    break
 
-            if entry_direction == 1:
-                tp_price = current_close + current_atr * tp_mult
-                sl_price = current_close - current_atr * sl_mult
-            elif entry_direction == 0:
-                tp_price = current_close - current_atr * tp_mult
-                sl_price = current_close + current_atr * sl_mult
-
-            hp_i = i + hold_period
             in_trade = True
 
-            trades.loc[trade_i, 'entry_i'] = i
-            trades.loc[trade_i, 'entry_time'] = current_timestamp
-            trades.loc[trade_i, 'entry_p'] = current_close
-            trades.loc[trade_i, 'atr'] = current_atr
-            trades.loc[trade_i, 'sl'] = sl_price
-            trades.loc[trade_i, 'tp'] = tp_price
-            trades.loc[trade_i, 'hp_i'] = i + hold_period
+            if entry_direction==1:
+                trades.loc[trade_i, 'confirmation'] = close[i] + confirmation_mult * atr_arr[i]
+            elif entry_direction==0:
+                trades.loc[trade_i, 'confirmation'] = close[i] - confirmation_mult * atr_arr[i]
+            trades.loc[trade_i, 'confirmation_hp_i'] = i + confirmation_wait
             trades.loc[trade_i, 'type'] = entry_direction
+            trades.loc[trade_i, 'potential'] = True
 
-        if in_trade:
-            if (trades.loc[trade_i, 'type'] == 1 and (current_close >= tp_price or current_close <= sl_price)) or \
-                    (trades.loc[trade_i, 'type'] == 0 and (current_close <= tp_price or current_close >= sl_price)) or \
-                    (i >= hp_i):
+            zone_bounds_plotting[trade_i] = current_zone
+
+            extremes_in_zone_plotting[trade_i] = (extremes_in_zone.index.tolist(), extremes_in_zone['extreme'].tolist())
+
+        if in_trade and trades.loc[trade_i, 'potential'] == True:
+            if (trades.loc[trade_i, 'type']==1 and (close[i] >= trades.loc[trade_i, 'confirmation'])) or \
+                    (trades.loc[trade_i, 'type']==0 and (close[i] <= trades.loc[trade_i, 'confirmation'])):
+                trades.loc[trade_i, 'potential'] = False
+                trades.loc[trade_i, 'sl'] = close[i] - atr_arr[i] * sl_mult if trades.loc[trade_i, 'type']==1 else close[i] + atr_arr[i]*sl_mult
+                trades.loc[trade_i, 'tp'] = close[i] + atr_arr[i] * tp_mult if trades.loc[trade_i, 'type']==1 else close[i] - atr_arr[i]*tp_mult
+                trades.loc[trade_i, 'entry_i'] = i
+                trades.loc[trade_i, 'entry_p'] = close[i]
+                trades.loc[trade_i, 'hp_i'] = i + hold_period
+            elif i >= trades.loc[trade_i, 'confirmation_hp_i']:
+                in_trade = False
+                trade_i += 1
+
+        if in_trade and trades.loc[trade_i, 'potential'] == False:
+            if (trades.loc[trade_i, 'type'] == 1 and (close[i] >= trades.loc[trade_i, 'tp'] or close[i] <= trades.loc[trade_i, 'sl'])) or \
+                    (trades.loc[trade_i, 'type'] == 0 and (close[i] <= trades.loc[trade_i, 'tp'] or close[i] >= trades.loc[trade_i, 'sl'])) or \
+                    (i >= trades.loc[trade_i, 'hp_i']):
                 trades.loc[trade_i, 'exit_i'] = i
-                trades.loc[trade_i, 'exit_time'] = current_timestamp
-                trades.loc[trade_i, 'exit_p'] = current_close
+                trades.loc[trade_i, 'exit_p'] = close[i]
+
+                if plot_graphs:
+                    # Plotting the results
+                    plt.figure(figsize=(14, 7))
+
+                    print(trades.loc[trade_i, 'entry_p'], trades.loc[trade_i, 'exit_p'])
+
+                    if (trades.loc[trade_i, 'exit_p'] - trades.loc[trade_i, 'entry_p'] > 0 and trades.loc[trade_i, 'type'] == 1) or \
+                            (trades.loc[trade_i, 'entry_p'] - trades.loc[trade_i, 'exit_p'] > 0 and trades.loc[trade_i, 'type'] == 0):
+                        plt.text(0.5, 1.075, "Success", fontsize=20, fontweight='bold', color='green',
+                                 horizontalalignment='center', transform=plt.gca().transAxes)
+                    else:
+                        plt.text(0.5, 1.075,
+                                 "Failure",
+                                 fontsize=20, fontweight='bold', color='red', horizontalalignment='center',
+                                 transform=plt.gca().transAxes)
+
+                    # Plotting close prices
+                    plt.plot(ohlcv['close'].iloc[int(trades.loc[trade_i, 'entry_i']) - lookback:i+1], label='Close Prices', color='blue', linewidth=2)
+
+                    # Plotting the zone min and max as a filled area
+                    plt.fill_between(range(int(trades.loc[trade_i, 'entry_i'])-lookback, i+1),
+                                     zone_bounds_plotting[trade_i][0], zone_bounds_plotting[trade_i][1],
+                                     color='green', alpha=0.3, label='Zone Area')
+
+                    # Plotting take profit and stop loss levels
+                    plt.axhline(y=trades.loc[trade_i, 'tp'], color='green', linestyle='--', label='Take Profit', linewidth=3)
+                    plt.axhline(y=trades.loc[trade_i, 'sl'], color='red', linestyle='--', label='Stop Loss', linewidth=3)
+                    plt.axvline(x=trades.loc[trade_i, 'entry_i'], color='black',linestyle=':', label='Entry Point', linewidth=2.5)
+
+                    # Plotting extremes
+                    plt.plot(all_extremes.loc[(all_extremes.index <= i+1) & (all_extremes.index >= int(trades.loc[trade_i, 'entry_i']) - lookback)].copy()['extreme'],
+                                color='purple', label='Extremes', zorder=5, linewidth=2, alpha=0.5)
+
+                    plt.scatter(extremes_in_zone_plotting[trade_i][0], extremes_in_zone_plotting[trade_i][1], color='red', s=30, zorder=6)
+
+                    # Plotting high and low prices as a translucent background
+
+                    plt.fill_between(range(int(trades.loc[trade_i, 'entry_i'])-lookback, i+1), ohlcv['high'].iloc[int(trades.loc[trade_i, 'entry_i']) - lookback:i+1],
+                                     ohlcv['low'].iloc[int(trades.loc[trade_i, 'entry_i']) - lookback:i+1],
+                                     color='gray', alpha=0.3, label='High-Low Range')
+
+                    plt.title(f'Support and Resistance Strategy from {ohlcv["date"].iloc[int(trades.loc[trade_i, "entry_i"]) - lookback]} to {ohlcv["date"].iloc[i+1]}')
+                    plt.xlabel('Time Index')
+                    plt.ylabel('Price')
+                    plt.legend()
+                    plt.grid()
+                    plt.show()
 
                 in_trade = False
                 trade_i += 1
 
-    trades['return'] = trades.apply(
-        lambda row: row['exit_p'] - row['entry_p'] if row['type'] == 1
-        else row['entry_p'] - row['exit_p'],
-        axis=1
-    )
+    trades = trades.dropna()
+
+    if len(trades) > 0:
+        trades['return'] = trades.apply(
+            lambda row: row['exit_p'] - row['entry_p'] if row['type'] == 1
+            else row['entry_p'] - row['exit_p'],
+            axis=1
+        )
+
+    print(trades['return'])
 
     return trades
 
-
 if __name__ == "__main__":
+    instruments = ["C:EURUSD", "C:EURJPY", "C:EURGBP", "C:GBPUSD", "C:AUDCAD"]
+    # instruments = ["C:EURUSD", "C:EURJPY", "C:EURGBP", "C:AUDCAD", "C:AUDCHF"]
+
     instrument = "C:USDJPY"
-    start = '2019-09-01'
-    end = '2019-12-01'
+
+    start = '2023-09-18'
+    end = '2024-09-18'
     granularity = ['1', 'hour']
 
-    sigma = 0.0025
+    # total_win_count = 0
+    # total_trade_count = 0
+    # all_profit = 0
 
-    filestr = f"{instrument[2:]}-{start}-{end}-{''.join(granularity)}.pkl"
-    filestr_wsig = f"{instrument[2:]}-{start}-{end}-{''.join(granularity)}-sig{sigma}.pkl"
+    # for instrument in instruments:
+    #     print("Fetching data...")
+    #     api = PolygonAPI()
+    #     df = api.get_data([instrument], start, end, granularity)[instrument]
+    #
+    #     print("Running strategy...")
+    #     trades = support_and_resistance_rejection(df, plot_graphs=False, sigma=0.0025, min_bounces=2, zone_size = 0.002, confirmation_mult = 3.0)
+    #
+    #     # Calculate total profit
+    #     total_profit = trades['return'].sum() if len(trades)>0 else 0
+    #
+    #     # Calculate win rate
+    #     win_count = (trades['return'] > 0).sum() if len(trades)>0 else 0
+    #     total_trades = len(trades)
+    #     # win_rate = (win_count / total_trades) * 100 if total_trades > 0 else 0
+    #
+    #     total_win_count += win_count
+    #     total_trade_count += total_trades
+    #
+    #     all_profit += total_profit
+    #
+    # win_rate = (total_win_count / total_trade_count) * 100 if total_trade_count > 0 else 0
+    # #
+    print("Fetching data...")
+    api = PolygonAPI()
+    df = api.get_data([instrument], start, end, granularity)[instrument]
 
+    print("Running strategy...")
+    trades = support_and_resistance_rejection(df, plot_graphs=False, sigma=0.0025, min_bounces=2, zone_size = 0.002, confirmation_mult=2.0, atr_min=0.001)
 
-    print("Getting data")
-    try:
-        print("  from file")
-        df = pd.read_pickle(filestr)
-    except:
-        print("  from api")
-        api = PolygonAPI()
-        df = api.get_data([instrument], start, end, granularity)[instrument]
-        df.to_pickle(filestr)
+    # Calculate total profit
+    total_profit = trades['return'].sum() if len(trades)>0 else 0
 
-    print("Getting directional change")
-    try:
-        print("  from file")
-        df = pd.read_pickle(filestr_wsig)
-    except:
-        print("  calculated")
-        dc = DirectionalChange(sigma=sigma).get_extremes(df)
-        df['extreme'] = dc.extremes['extreme']
-        df['extreme_type'] = dc.extremes['type']
-        df.to_pickle(filestr_wsig)
+    # Calculate win rate
+    win_count = (trades['return'] > 0).sum() if len(trades)>0 else 0
+    total_trades = len(trades)
+    win_rate = (win_count / total_trades) * 100 if total_trades > 0 else 0
 
-    # df = df[:1000]  # for quick testing
-    print("Running strategy")
-    for min_touches in range(2, 3, 2):
-        trades = support_and_resistance_rejection(df, min_touches)
-        trades = trades.dropna(subset='exit_time')
-        # Calculate total profit
-        total_profit = trades['return'].sum()
+    print(f"Total Profit {total_profit}")
+    print(f"Win Rate: {win_rate}")
+    print(f"Total Trades: {total_trades}")
 
-        # Calculate win rate
-        win_count = (trades['return'] > 0).sum()
-        total_trades = len(trades)
-        win_rate = (win_count / total_trades) * 100 if total_trades > 0 else 0
-
-        # Print the results
-        print(f'Min touches: {min_touches:2} - Win Rate: {win_rate:.2f}% - Total Profit: {total_profit}')
-
-        import dash
-        from dash import dcc, html
-        from dash.dependencies import Input, Output
-        import plotly.graph_objects as go
-
-        app = dash.Dash(__name__)
-
-        def create_initial_figure():
-            # plot all data
-            fig = go.Figure(data=[go.Candlestick(x=df.index, open=df.open, high=df.high, low=df.low, close=df.close)])
-            fig.update_layout(title=str("data"), xaxis_rangeslider_visible=False)  # hide slider
-
-            # plot directional change
-            fig.add_scatter(x=df['extreme'].dropna().index, y=df['extreme'].dropna(), line_color='black')
-
-            for trade_type in (0, 1):
-                color = ('red', 'green')[trade_type]
-                marker_in = ('triangle-up', 'triangle-down')[trade_type]
-                marker_out = ('triangle-down', 'triangle-up')[trade_type]
-                # Plot entry markers
-                fig.add_trace(go.Scatter(
-                    x=trades.loc[trades['type'] == trade_type, 'entry_time'],
-                    y=df.loc[trades.loc[trades['type'] == trade_type, 'entry_time'], 'close'],
-                    mode='markers',
-                    marker=dict(size=12, color=color, symbol=marker_in),
-                ))
-
-                # Plot exit markers
-                fig.add_trace(go.Scatter(
-                    x=trades.loc[trades['type'] == trade_type, 'exit_time'],
-                    y=df.loc[trades.loc[trades['type'] == trade_type, 'exit_time'], 'close'],
-                    mode='markers',
-                    marker=dict(size=12, color=color, symbol=marker_out),
-                ))
-
-            return fig
-
-        # Layout of the app
-        app.layout = html.Div([
-            dcc.Graph(id='candlestick-chart', figure=create_initial_figure()),  # Main chart
-        ])
-
-        app.run_server(debug=True)
+    # Print the results
+    # print(f'Total Profit: {all_profit}')
+    # print(f'Win Rate: {win_rate:.2f}%')
+    # print(f'Total Trade Count: {total_trade_count}')
