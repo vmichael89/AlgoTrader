@@ -116,8 +116,8 @@ def support_and_resistance_rejection(df: pd.DataFrame, min_touches_sr=2, lookbac
 
 if __name__ == "__main__":
     instrument = "C:USDJPY"
-    start = '2014-09-18'
-    end = '2024-09-18'
+    start = '2019-09-01'
+    end = '2019-12-01'
     granularity = ['1', 'hour']
 
     sigma = 0.0025
@@ -149,9 +149,9 @@ if __name__ == "__main__":
 
     # df = df[:1000]  # for quick testing
     print("Running strategy")
-    for min_touches in range(2, 20, 2):
+    for min_touches in range(2, 3, 2):
         trades = support_and_resistance_rejection(df, min_touches)
-
+        trades = trades.dropna(subset='exit_time')
         # Calculate total profit
         total_profit = trades['return'].sum()
 
@@ -163,11 +163,46 @@ if __name__ == "__main__":
         # Print the results
         print(f'Min touches: {min_touches:2} - Win Rate: {win_rate:.2f}% - Total Profit: {total_profit}')
 
-    # import plotly.graph_objects as go
-    #
-    # fig = go.Figure(data=[
-    #     go.Candlestick(x=df.index, open=df.open, high=df.high, low=df.low, close=df.close)
-    # ])
-    # fig.update_layout(title=str("data"), xaxis_rangeslider_visible=False)
-    # fig.add_scatter(x=df['extreme'].dropna().index, y=df['extreme'].dropna(), line_color='black')
-    # fig.show(renderer='browser')
+        import dash
+        from dash import dcc, html
+        from dash.dependencies import Input, Output
+        import plotly.graph_objects as go
+
+        app = dash.Dash(__name__)
+
+        def create_initial_figure():
+            # plot all data
+            fig = go.Figure(data=[go.Candlestick(x=df.index, open=df.open, high=df.high, low=df.low, close=df.close)])
+            fig.update_layout(title=str("data"), xaxis_rangeslider_visible=False)  # hide slider
+
+            # plot directional change
+            fig.add_scatter(x=df['extreme'].dropna().index, y=df['extreme'].dropna(), line_color='black')
+
+            for trade_type in (0, 1):
+                color = ('red', 'green')[trade_type]
+                marker_in = ('triangle-up', 'triangle-down')[trade_type]
+                marker_out = ('triangle-down', 'triangle-up')[trade_type]
+                # Plot entry markers
+                fig.add_trace(go.Scatter(
+                    x=trades.loc[trades['type'] == trade_type, 'entry_time'],
+                    y=df.loc[trades.loc[trades['type'] == trade_type, 'entry_time'], 'close'],
+                    mode='markers',
+                    marker=dict(size=12, color=color, symbol=marker_in),
+                ))
+
+                # Plot exit markers
+                fig.add_trace(go.Scatter(
+                    x=trades.loc[trades['type'] == trade_type, 'exit_time'],
+                    y=df.loc[trades.loc[trades['type'] == trade_type, 'exit_time'], 'close'],
+                    mode='markers',
+                    marker=dict(size=12, color=color, symbol=marker_out),
+                ))
+
+            return fig
+
+        # Layout of the app
+        app.layout = html.Div([
+            dcc.Graph(id='candlestick-chart', figure=create_initial_figure()),  # Main chart
+        ])
+
+        app.run_server(debug=True)
