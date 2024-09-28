@@ -21,8 +21,3 @@ class Trader:
         print(f'Fetching data from {start} to {end} with granularity {granularity} and price {price}')
 
         self.data.extend(self.broker.get_data(instruments, start, end, granularity, price))
-
-
-if __name__ == '__main__':
-    trader = Trader()
-    trader.add_data(['EUR_USD'])

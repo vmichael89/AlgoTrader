@@ -3,7 +3,7 @@ from dash import dcc, html, no_update
 from dash.dependencies import Input, Output, State
 import plotly.graph_objs as go
 
-from trader import Trader
+from .trader import Trader
 
 app = dash.Dash(__name__)
 
@@ -22,7 +22,7 @@ app.layout = html.Div([
     State('data-store', 'data')  # Get the previously stored data
 )
 def update_data_store(n, store):
-    new_data = ';'.join([str(d) for d in trader.data])
+    new_data = ';'.join([str(d) for d in tdr.data])
     if store:
         _, current_data = store
         has_updated = not (current_data == new_data)
@@ -43,7 +43,7 @@ def update_graphs(data_store, current_figure):
         return no_update  # No updates if data is unchanged
 
     figures = []
-    for i, data in enumerate(trader.data):
+    for i, data in enumerate(tdr.data):
         fig = go.Figure(data=[
             go.Candlestick(x=data.df.index, open=data.df.open, high=data.df.high, low=data.df.low, close=data.df.close)
         ])
@@ -52,11 +52,7 @@ def update_graphs(data_store, current_figure):
         figures.append(dcc.Graph(id=f'graph-{i}', figure=fig))
     return figures
 
-
-trader = Trader()
-
-trader.add_data(['EUR_USD'])
-
+tdr = Trader()
 app.run_server(debug=True)
 
 print("http://127.0.0.1:8050/")

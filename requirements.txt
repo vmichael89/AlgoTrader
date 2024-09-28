@@ -1,6 +1,9 @@
 # General
+requests
 numpy
 pandas
+
+# Plotting
 matplotlib
 plotly
 dash
