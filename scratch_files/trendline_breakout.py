@@ -1,10 +1,12 @@
-from algos.trendline_automation import fit_trendlines_single
+import os
 import pandas_ta as ta
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from algos.directional_change import DirectionalChange
-
+os.chdir("..")
+from trader.algos.trendline_automation import fit_trendlines_single
+from trader.algos.directional_change import DirectionalChange
+os.chdir("trader")
 
 def trendline_breakout_dataset(
         ohlcv: pd.DataFrame, lookback: int,

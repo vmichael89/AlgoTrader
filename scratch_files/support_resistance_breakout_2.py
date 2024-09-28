@@ -1,6 +1,8 @@
 import os
-from algos.directional_change import DirectionalChange
-from broker import PolygonAPI
+os.chdir("..")
+from trader.algos.directional_change import DirectionalChange
+from trader.broker import PolygonAPI
+os.chdir("trader")
 import pandas as pd
 import numpy as np
 import pandas_ta as ta

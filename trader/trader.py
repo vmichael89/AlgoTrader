@@ -1,6 +1,6 @@
 import datetime
 
-from broker import OandaBroker
+from .broker import OandaBroker
 
 
 class Trader:

@@ -90,7 +90,7 @@ def train_and_evaluate(X, y, **kwargs):
 
 if __name__ == "__main__":
     # Define the relative path to model_data.csv
-    file_path = os.path.join("..", "..", "data", "model_data_144.csv")
+    file_path = os.path.join("../trader", "..", "data", "model_data_144.csv")
 
     # Load the CSV file
     df = load_data(file_path).dropna()

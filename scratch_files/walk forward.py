@@ -1,12 +1,12 @@
+import os
 import numpy as np
 import pandas as pd
-import pandas_ta as ta
 import matplotlib.pyplot as plt
 from trendline_breakout import trendline_breakout_dataset
 from sklearn.ensemble import RandomForestClassifier
-from broker import PolygonAPI
-from broker import OandaBroker
-
+os.chdir("..")
+from trader.broker import OandaBroker
+os.chdir("trader")
 
 def walkforward_model(
         close: np.array, trades: pd.DataFrame,

@@ -1,6 +1,9 @@
+import os
 import pandas as pd
 import numpy as np
-from broker import PolygonAPI
+os.chdir("..")
+from trader.broker import PolygonAPI
+os.chdir("trader")
 
 class Backtest:
     def __init__(self, instruments, start, end, granularity, strategy, timezone="new york"):

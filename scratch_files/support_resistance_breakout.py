@@ -1,9 +1,12 @@
-from algos.directional_change import DirectionalChange
-from broker import PolygonAPI
+import os
 import pandas as pd
 import numpy as np
 import pandas_ta as ta
 import matplotlib.pyplot as plt
+os.chdir("..")
+from trader.algos.directional_change import DirectionalChange
+from trader.broker import PolygonAPI
+os.chdir("trader")
 
 # Define the main function
 def support_and_resistance_rejection(ohlcv: pd.DataFrame, lookback: int = 240, atr_lookback: int = 168, hold_period = 48, confirmation_wait:int=12,

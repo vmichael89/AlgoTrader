@@ -1,9 +1,9 @@
-from backtesting import Backtest
-from trendline_breakout import trendline_breakout_dataset
-import pandas as pd
 import json
 
-with open("../data/maven_pairs.json","r") as json_file:
+from backtesting import Backtest
+from trendline_breakout import trendline_breakout_dataset
+
+with open("../data/maven_pairs.json", "r") as json_file:
     instruments = json.load(json_file)
 #
 instrument = "X:BTCUSD"

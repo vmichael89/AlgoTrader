@@ -1,9 +1,12 @@
-from algos.directional_change import DirectionalChange
-from broker import PolygonAPI
+import os
 import pandas as pd
 import numpy as np
 import pandas_ta as ta
 import matplotlib.pyplot as plt
+os.chdir("..")
+from trader.algos.directional_change import DirectionalChange
+from trader.broker import PolygonAPI
+os.chdir("trader")
 
 # Define the main function
 def directional_trades(ohlcv: pd.DataFrame, lookback: int = 100, atr_lookback: int = 100, hold_period = 48,
