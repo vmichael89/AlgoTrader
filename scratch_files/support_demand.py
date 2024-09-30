@@ -23,7 +23,7 @@ df['higher_bottom_count'] = df['higher_bottom'].groupby((df['higher_bottom'] == 
 
 tops = dc.extremes[dc.extremes.type == 'top']  # shortcut
 df['higher_top'] = (tops.extreme > tops.extreme.shift(1)).astype(int)
-df['higher_tops_count'] = df['higher_top'].groupby((df['higher_top'] == 0).cumsum()).cumsum()
+df['higher_top_count'] = df['higher_top'].groupby((df['higher_top'] == 0).cumsum()).cumsum()
 
 # inspect dataframe step by step
 df.drop(columns=['higher_bottom', 'higher_top'], inplace=True)
@@ -37,4 +37,25 @@ df = trader.data[0].df.merge(df, left_index=True, right_index=True, how='outer')
 fig = go.Figure(data=[go.Candlestick(x=df.index, open=df.open, high=df.high, low=df.low, close=df.close)])
 fig.update_layout(title=str(trader.data[0]), xaxis_rangeslider_visible=False)
 fig.add_scatter(x=dc.extremes.index, y=dc.extremes.extreme)
+
+# Add annotations for higher bottom counts
+for i, row in df[df['type'] == 'bottom'].iterrows():
+    fig.add_annotation(
+        x=i,
+        y=row['extreme'],
+        text=f"{int(row['higher_bottom_count'])}",
+        showarrow=False,
+        bgcolor="lightblue"
+    )
+
+# Add annotations for higher top counts
+for i, row in df[df['type'] == 'top'].iterrows():
+    fig.add_annotation(
+        x=i,
+        y=row['extreme'],
+        text=f"{int(row['higher_top_count'])}",
+        showarrow=False,
+        bgcolor="lightgreen"
+    )
+
 fig.show(renderer='browser')
