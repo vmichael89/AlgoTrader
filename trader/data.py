@@ -54,7 +54,18 @@ class Data:
     def add_indicator(self):
         pass
 
-    def plot(self):
-        fig = go.Figure(data=[go.Candlestick(x=self.df.index, open=self.df.open, high=self.df.high, low=self.df.low, close=self.df.close)])
-        fig.update_layout(title=str(self), xaxis_rangeslider_visible=False)
-        return fig
+    def plot_data(self):
+        graph_obj = go.Candlestick(
+            x=self.df.index,
+            open=self.df.open,
+            high=self.df.high,
+            low=self.df.low,
+            close=self.df.close,
+            increasing_line_color='black',
+            decreasing_line_color='black',
+            increasing_fillcolor='lightblue',
+            decreasing_fillcolor='gray',
+            increasing_line_width=0.5,
+            decreasing_line_width=0.5
+        )
+        return graph_obj

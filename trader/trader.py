@@ -1,6 +1,8 @@
 import os
 import datetime
 
+import plotly.graph_objects as go
+
 from .broker import OandaBroker
 from .data import Data
 
@@ -53,3 +55,40 @@ class Trader:
         elif data:
             data.save()
 
+    def plot_bid_ask_candles(self, bid: int, ask: int):
+        """Creates a plot with bid and ask candles.
+
+        Parameters
+        ----------
+        bid: trader's data index of bid data
+        ask: trader's data index of ask data"""
+
+        bid_data = self.data[bid]
+        ask_data = self.data[ask]
+
+        bid_instrument = bid_data.symbol
+        ask_instrument = ask_data.symbol
+        if bid_instrument != ask_instrument:
+            raise Exception(f'Incompatible instruments {bid_instrument} and {ask_instrument}.')
+
+        # Get granularities from most occurring time difference
+        bid_granularity = bid_data.df.index.to_series().diff().value_counts().index[0]
+        ask_granularity = ask_data.df.index.to_series().diff().value_counts().index[0]
+        if bid_granularity != ask_granularity:
+            raise Exception(f'Incompatible granularity {bid_granularity} and {ask_granularity}.')
+
+        # Initialize figure
+        fig = go.Figure(data=[bid_data.plot_data(), ask_data.plot_data()])
+        fig.update_layout(xaxis_rangeslider_visible=False)
+
+        # Modify figure: shift-left bid candles and shift-right ask candles
+        td = bid_granularity / 8
+        adjusted_bid_index = bid_data.df.index - td
+        adjusted_ask_index = ask_data.df.index + td
+        fig.data[0].x = adjusted_bid_index
+        fig.data[1].x = adjusted_ask_index
+
+        fig.show(renderer='browser')
+
+    def plot_dual_timeframe(self):
+        pass
