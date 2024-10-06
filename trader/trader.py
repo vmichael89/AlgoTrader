@@ -23,7 +23,7 @@ class Trader:
         # Check if data is locally available
         for instrument in instruments:
             for p in price:
-                dummy_data = Data(symbol=instrument, start=start, end=end, granularity=granularity, price=price, df=[])
+                dummy_data = Data(symbol=instrument, start=start, end=end, granularity=granularity, price=p, df=[])
                 if os.path.exists(str(dummy_data) + '.pkl'):
                     print(f'Loading from file: {instrument} data from {start} to {end} with granularity {granularity} and price {p}')
                     self.data.append(dummy_data.load())
