@@ -112,6 +112,7 @@ class OandaBroker(Broker):
             df_data = df_data.rename(
                 columns={'o': 'open', 'h': 'high', 'l': 'low', 'c': 'close', 'volume': 'volume'}
             )
+            df_data.index.name = 'datetime'
 
             data = Data(instr, start, end, granularity, price, df_data)
 
@@ -157,8 +158,8 @@ class PolygonAPI():
             df.drop(columns=['vw', 'n'], inplace=True)
             df.rename(columns={'o': 'open', 'c': 'close', 'h': 'high', 'l': 'low', 'v': 'volume', 't': 'date'},
                       inplace=True)
-            df['date'] = pd.to_datetime(df['date'], unit='ms')
-            df.set_index('date', inplace=True)
+            df['datetime'] = pd.to_datetime(df['datetime'], unit='ms')
+            df.set_index('datetime', inplace=True)
 
             if timezone=="new york":
                 df.index = df.index.tz_localize('UTC')
