@@ -90,3 +90,8 @@ class Data:
             decreasing_line_width=0.5
         )
         return graph_obj
+
+    def plot(self):
+        fig = go.Figure(data=self.plot_data())
+        fig.update_layout(xaxis_rangeslider_visible=False)
+        fig.show(renderer='browser')
