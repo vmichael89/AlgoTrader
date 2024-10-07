@@ -19,7 +19,7 @@ class Data:
 
     @property
     def default_filename(self):
-        return f'{str(self)}.pkl'
+        return f'./data/{str(self)}.pkl'
 
     @property
     def num_candles(self):
