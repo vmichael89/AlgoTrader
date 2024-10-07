@@ -25,6 +25,26 @@ class Data:
     def num_candles(self):
         return len(self.df)
 
+    @staticmethod
+    def assert_data_with_same_symbol(data1: 'Data', data2: 'Data'):
+        instrument1 = data1.symbol
+        instrument2 = data2.symbol
+        if instrument1 != instrument2:
+            raise Exception(f'Incompatible instruments {instrument1} and {instrument2}.')
+        return instrument1
+
+    @staticmethod
+    def assert_data_with_same_granularity(data1: 'Data', data2: 'Data'):
+        # Get granularities from most occurring time difference
+        granularity1 = data1.get_most_occurring_granularity()
+        granularity2 = data2.get_most_occurring_granularity()
+        if granularity1 != granularity2:
+            raise Exception(f'Incompatible granularity {granularity1} and {granularity2}.')
+        return granularity1
+
+    def get_most_occurring_granularity(self):
+        return self.df.index.to_series().diff().value_counts().index[0]
+
     def save(self, filepath=None, folderpath=None):
         """Saves data's dataframe in pickle format.
 
@@ -56,6 +76,7 @@ class Data:
 
     def plot_data(self):
         graph_obj = go.Candlestick(
+            name=str(self),
             x=self.df.index,
             open=self.df.open,
             high=self.df.high,

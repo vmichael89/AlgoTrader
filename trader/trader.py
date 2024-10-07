@@ -1,5 +1,6 @@
 import os
 import datetime
+import pandas as pd
 
 import plotly.graph_objects as go
 
@@ -63,26 +64,19 @@ class Trader:
         bid: trader's data index of bid data
         ask: trader's data index of ask data"""
 
-        bid_data = self.data[bid]
-        ask_data = self.data[ask]
+        bid_data: Data = self.data[bid]
+        ask_data: Data = self.data[ask]
 
-        bid_instrument = bid_data.symbol
-        ask_instrument = ask_data.symbol
-        if bid_instrument != ask_instrument:
-            raise Exception(f'Incompatible instruments {bid_instrument} and {ask_instrument}.')
+        Data.assert_data_with_same_symbol(bid_data, ask_data)
 
-        # Get granularities from most occurring time difference
-        bid_granularity = bid_data.df.index.to_series().diff().value_counts().index[0]
-        ask_granularity = ask_data.df.index.to_series().diff().value_counts().index[0]
-        if bid_granularity != ask_granularity:
-            raise Exception(f'Incompatible granularity {bid_granularity} and {ask_granularity}.')
+        granularity = Data.assert_data_with_same_granularity(bid_data, ask_data)
 
         # Initialize figure
         fig = go.Figure(data=[bid_data.plot_data(), ask_data.plot_data()])
         fig.update_layout(xaxis_rangeslider_visible=False)
 
         # Modify figure: shift-left bid candles and shift-right ask candles
-        td = bid_granularity / 8
+        td = granularity / 8
         adjusted_bid_index = bid_data.df.index - td
         adjusted_ask_index = ask_data.df.index + td
         fig.data[0].x = adjusted_bid_index
@@ -90,5 +84,44 @@ class Trader:
 
         fig.show(renderer='browser')
 
-    def plot_dual_timeframe(self):
-        pass
+    def plot_dual_timeframe(self, low_timeframe: int, high_timeframe: int):
+        """Creates a plot with bid and ask candles.
+
+        Parameters
+        ----------
+        low_timeframe: trader's data index of lower timeframe data, e.g. hourly
+        high_timeframe: trader's data index of higher timeframe data, e.g. daily"""
+
+        high_gran_data: Data = self.data[low_timeframe]
+        low_gran_data: Data = self.data[high_timeframe]
+
+        Data.assert_data_with_same_symbol(low_gran_data, high_gran_data)
+
+        low_granularity = low_gran_data.get_most_occurring_granularity()
+        high_granularity = high_gran_data.get_most_occurring_granularity()
+
+        # Initialize figure
+        fig = go.Figure(data=[low_gran_data.plot_data(), high_gran_data.plot_data()],
+                        layout=dict(
+                            xaxis=dict(
+                                rangeslider_visible=False,
+                                showgrid=True,
+                                gridcolor='lightgray',  # Set grid color to ensure it's visible
+                                gridwidth=1,
+                                tickvals=pd.date_range(  # Ticks between big candles
+                                    start=low_gran_data.df.index.min() - low_granularity / 2,
+                                    end=low_gran_data.df.index.max() + low_granularity / 2,
+                                    freq=low_granularity)
+                                # TODO tick handling needs to be be done better
+                                #  not good lowgran data is hidden
+                            ),
+                            xaxis2=dict(
+                                rangeslider_visible=False,
+                                overlaying='x',
+                                side='bottom',
+                                dtick='H1'
+                            ),
+                            hovermode='x unified'
+                        ))
+        fig.update_traces(selector=dict(name=str(high_gran_data)), xaxis='x2')
+        fig.show(renderer='browser')
