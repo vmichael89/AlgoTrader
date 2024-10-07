@@ -1,14 +1,14 @@
 from abc import ABC, abstractmethod
 from pathlib import Path
 import threading
+import json
+import requests
 
 import pandas as pd
 import tpqoa
 
-import json
-import requests
+from .data import Data
 
-import configparser
 
 # Inherit standard api class to change streaming behavior
 class OandaAPI(tpqoa.tpqoa):
@@ -64,26 +64,6 @@ class OandaAPI(tpqoa.tpqoa):
         print(f'Started streaming for {instruments}')
 
 
-class Data:
-    def __init__(self, symbol, start, end, granularity, price, df):
-        self.symbol = symbol
-        self.start = start
-        self.end = end
-        self.granularity = granularity
-        self.price = price
-        self.df = df
-        self.candles = len(df)
-
-    def __repr__(self):
-        return ','.join([self.symbol, self.price, self.granularity, f'{self.candles} candles'])
-
-    def add_candle(self, time, o, h, l, c, volume):
-        self.df = pd.concat([
-            self.df,
-            pd.DataFrame(data={'open': o, 'high': h, 'low': l, 'close': c, 'volume': volume}, index=[time])
-        ])
-
-
 class Broker(ABC):
 
     @abstractmethod
@@ -132,6 +112,7 @@ class OandaBroker(Broker):
             df_data = df_data.rename(
                 columns={'o': 'open', 'h': 'high', 'l': 'low', 'c': 'close', 'volume': 'volume'}
             )
+            df_data.index.name = 'datetime'
 
             data = Data(instr, start, end, granularity, price, df_data)
 
@@ -141,6 +122,7 @@ class OandaBroker(Broker):
 
     def stream_data(self, instrument):
         self.api.stream_data(instrument)
+
 
 class PolygonAPI():
     def __init__(self):
@@ -176,8 +158,8 @@ class PolygonAPI():
             df.drop(columns=['vw', 'n'], inplace=True)
             df.rename(columns={'o': 'open', 'c': 'close', 'h': 'high', 'l': 'low', 'v': 'volume', 't': 'date'},
                       inplace=True)
-            df['date'] = pd.to_datetime(df['date'], unit='ms')
-            df.set_index('date', inplace=True)
+            df['datetime'] = pd.to_datetime(df['datetime'], unit='ms')
+            df.set_index('datetime', inplace=True)
 
             if timezone=="new york":
                 df.index = df.index.tz_localize('UTC')
@@ -187,7 +169,3 @@ class PolygonAPI():
             datas[instrument] = df
 
         return datas
-#
-# api = PolygonAPI()
-#
-# print(api.get_data(["C:EURUSD"], '2024-08-18', '2024-09-18', ['1','hour']))

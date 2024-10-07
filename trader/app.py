@@ -6,14 +6,23 @@ import plotly.graph_objs as go
 from .trader import Trader
 
 app = dash.Dash(__name__)
+tdr = Trader()
 
 # Layout with a hidden store
 app.layout = html.Div([
+    html.Button(id='add-data-button', children="Add Data"),
+    dcc.Dropdown([el[1] for el in tdr.broker.api.get_instruments()], 'EUR_USD', id='instruments-dropdown'),
     dcc.Interval(id='interval-component', interval=1000, n_intervals=0),
     dcc.Store(id='data-store'),
     html.Div(id='candlestick-subplot'),
 ])
 
+@app.callback(
+    Input('add-data-button', 'n_clicks'),
+    State('instruments-dropdown', 'value')
+)
+def add_data(n, instrument):
+    tdr.add_data([instrument])
 
 # Callback to update the store data with the latest from Trader
 @app.callback(
@@ -52,7 +61,6 @@ def update_graphs(data_store, current_figure):
         figures.append(dcc.Graph(id=f'graph-{i}', figure=fig))
     return figures
 
-tdr = Trader()
 app.run_server(debug=True)
 
 print("http://127.0.0.1:8050/")
