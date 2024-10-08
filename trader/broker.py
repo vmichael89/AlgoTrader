@@ -66,6 +66,10 @@ class OandaAPI(tpqoa.tpqoa):
 
 class Broker(ABC):
 
+    @classmethod
+    def __repr__(cls):
+        return cls.__class__.__name__  # Returns the class name
+
     @abstractmethod
     def get_data(self, instruments, start, end, granularity, price, log=False):
         pass
@@ -124,12 +128,12 @@ class OandaBroker(Broker):
         self.api.stream_data(instrument)
 
 
-class PolygonAPI():
+class PolygonAPI(Broker):
     def __init__(self):
         with open(Path('.') / 'config' / 'polygon.cfg', 'r') as f:
             self.API_KEY = f.read()
 
-    def get_data(self, instruments, start, end, granularity, timezone="new york"):
+    def get_data(self, instruments, start, end, granularity, price='M', log=False):
         headers = {"Authorization": "Bearer " + self.API_KEY}
 
         datas = {}
@@ -161,10 +165,10 @@ class PolygonAPI():
             df['datetime'] = pd.to_datetime(df['datetime'], unit='ms')
             df.set_index('datetime', inplace=True)
 
-            if timezone=="new york":
-                df.index = df.index.tz_localize('UTC')
-                df.index = df.index.tz_convert('America/New_York')
-                df.index = df.index.tz_localize(None)
+            # if timezone=="new york":
+            df.index = df.index.tz_localize('UTC')
+            df.index = df.index.tz_convert('America/New_York')
+            df.index = df.index.tz_localize(None)
 
             datas[instrument] = df
 

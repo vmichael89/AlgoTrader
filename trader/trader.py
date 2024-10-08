@@ -4,14 +4,22 @@ import pandas as pd
 
 import plotly.graph_objects as go
 
-from .broker import OandaBroker
+from .broker import OandaBroker, PolygonAPI
 from .data import Data
 
 
 class Trader:
 
-    def __init__(self):
-        self.broker = OandaBroker()
+    broker_names = {'oanda': OandaBroker, 'polygon': PolygonAPI}
+
+    def __init__(self, broker=list(broker_names.keys())[0]):
+        # Check if `broker`is in implemented broker_names
+        if broker in self.broker_names:
+            self.broker = self.broker_names[broker]()
+        else:
+            available_brokers = ', '.join(cls.__name__ for cls in self.broker_names.values())
+            raise KeyError(f'`{broker}` not available in brokers: {available_brokers}')
+
         self.data = []
 
     def add_data(self, instruments, **kwargs):
