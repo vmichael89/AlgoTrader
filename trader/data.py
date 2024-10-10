@@ -5,6 +5,14 @@ import plotly.graph_objects as go
 
 
 class Data:
+    # Define column name constants
+    OPEN = 'open'
+    HIGH = 'high'
+    LOW = 'low'
+    CLOSE = 'close'
+    VOLUME = 'volume'
+    INDEX = 'datetime'
+
     def __init__(self, symbol, start, end, granularity, price, df):
         self.symbol = symbol
         self.start = start

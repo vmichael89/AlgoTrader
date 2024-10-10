@@ -66,21 +66,70 @@ class OandaAPI(tpqoa.tpqoa):
 
 class Broker(ABC):
 
+    @property
+    @abstractmethod
+    def COLUMN_MAPPING(self):
+        """Must return a dictionary for column mapping."""
+        pass
+
+    @property
+    @abstractmethod
+    def GRANULARITY_MAP(self):
+        """Must return a dictionary for granularity mapping."""
+        pass
+
     @classmethod
     def __repr__(cls):
         return cls.__class__.__name__  # Returns the class name
 
     @abstractmethod
-    def get_data(self, instruments, start, end, granularity, price, log=False):
+    def get_data(self, instruments, start, end, granularity, price):
         pass
 
 
 class OandaBroker(Broker):
+
+    @property
+    def COLUMN_MAPPING(self):
+        return {
+            'o': Data.OPEN,
+            'h': Data.HIGH,
+            'l': Data.LOW,
+            'c': Data.CLOSE,
+            'volume': Data.VOLUME
+        }
+
+    @property
+    def GRANULARITY_MAP(self):
+        return {
+            pd.to_timedelta('5S'): 'S5',
+            pd.to_timedelta('10S'): 'S10',
+            pd.to_timedelta('15S'): 'S15',
+            pd.to_timedelta('30S'): 'S30',
+            pd.to_timedelta('1min'): 'M1',
+            pd.to_timedelta('2min'): 'M2',
+            pd.to_timedelta('4min'): 'M4',
+            pd.to_timedelta('5min'): 'M5',
+            pd.to_timedelta('10min'): 'M10',
+            pd.to_timedelta('15min'): 'M15',
+            pd.to_timedelta('30min'): 'M30',
+            pd.to_timedelta('1H'): 'H1',
+            pd.to_timedelta('2H'): 'H2',
+            pd.to_timedelta('3H'): 'H3',
+            pd.to_timedelta('4H'): 'H4',
+            pd.to_timedelta('6H'): 'H6',
+            pd.to_timedelta('8H'): 'H8',
+            pd.to_timedelta('12H'): 'H12',
+            pd.to_timedelta('1D'): 'D',
+            pd.to_timedelta('1W'): 'W',
+            pd.to_timedelta('1M'): 'M'
+        }
+
     def __init__(self):
         self.api = OandaAPI((Path('.') / 'config' / 'oanda.cfg').resolve().__str__())
         self.instruments = type('Instruments', (object,), {instr[1]: instr[1] for instr in self.api.get_instruments()})()
 
-    def get_data(self, instruments, start, end, granularity, price, log=False):
+    def get_data(self, instruments, start, end, granularity, price):
         """
         Fetch historical data for the specified instruments from Oanda.
 
@@ -89,36 +138,36 @@ class OandaBroker(Broker):
         :param end: End date for the historical data (e.g., '2024-08-20')
         :param granularity: Time interval for data (e.g., 'H1' for 1-hour candles)
         :param price: Price type ('M' for mid prices)
-        :param log: Whether to log the progress of fetching data (default: False)
         :return: Dictionary of dataframes, each corresponding to one instrument
         """
 
         if isinstance(instruments, str):
             instruments = [instruments]
 
+        # Check if granularity is in the map, if not raise an error
+        granularity_timedelta = pd.to_timedelta(granularity)
+        if granularity_timedelta not in self.GRANULARITY_MAP:
+            raise ValueError(f"Granularity {granularity} is not valid or not supported.")
+
         datas = []
 
         for instr in instruments:
-            if log:
-                print(f'Fetching data for {instr}...')
 
             # Get historical data for the instrument
             df_data = self.api.get_history(
                 instrument=instr,
                 start=start,
                 end=end,
-                granularity=granularity,
+                granularity=self.GRANULARITY_MAP[granularity_timedelta],
                 price=price,
                 localize=False
             )
 
             # Rename columns
-            df_data = df_data.rename(
-                columns={'o': 'open', 'h': 'high', 'l': 'low', 'c': 'close', 'volume': 'volume'}
-            )
-            df_data.index.name = 'datetime'
+            df_data = df_data.rename(columns=self.COLUMN_MAPPING)
+            df_data.index.name = Data.INDEX
 
-            data = Data(instr, start, end, granularity, price, df_data)
+            data = Data(instr, start, end, granularity_timedelta, price, df_data)
 
             datas.append(data)
 
