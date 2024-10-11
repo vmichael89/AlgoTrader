@@ -144,7 +144,7 @@ class OandaBroker(Broker):
             '12H': 'H12',
             '1D': 'D',
             '1W': 'W',
-            '1M': 'M'
+            #'1M': 'M'  # tpqoa error
         }
 
     def __init__(self):

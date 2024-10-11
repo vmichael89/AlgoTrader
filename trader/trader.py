@@ -13,17 +13,20 @@ class Trader:
 
     broker_names = {'oanda': OandaBroker, 'polygon': PolygonAPI}
 
-    def __init__(self, broker=list(broker_names.keys())[0]):
+    def __init__(self):
+        self.brokers = {}
+        self.data = []
+
+    def add_broker(self, broker):
         # Check if `broker` is in implemented broker_names
         if broker in self.broker_names:
-            self.broker = self.broker_names[broker]()
+            self.brokers[broker] = self.broker_names[broker]()  # Create broker instance
         else:
             available_brokers = ', '.join(cls.__name__ for cls in self.broker_names.values())
             raise KeyError(f'`{broker}` not available in brokers: {available_brokers}')
 
-        self.data = []
+    def add_data(self, instruments, start=None, end=None, granularities='1H', prices='M', broker=None):
 
-    def add_data(self, instruments, start=None, end=None, granularities='1H', prices='M'):
         today = datetime.datetime.utcnow().date().strftime('%Y-%m-%d')
         seven_days_ago = (datetime.datetime.utcnow() - datetime.timedelta(days=7)).date().strftime('%Y-%m-%d')
 
@@ -36,6 +39,18 @@ class Trader:
         granularities = [granularities] if not isinstance(granularities, list) else granularities
         prices = [prices] if not isinstance(prices, list) else prices
 
+        # Select a broker, default to the first one in the dictionary if not specified
+        if broker is None:
+            if len(self.brokers) == 0:
+                broker_instance = None
+            else:
+                broker = next(iter(self.brokers.keys()))  # Get the first broker if none is specified
+                broker_instance = self.brokers[broker]
+        elif broker in self.brokers:
+            broker_instance = self.brokers[broker]
+        else:
+            raise KeyError(f'`{broker}` broker not available.')
+
         # Check if data is locally available
         for instrument, granularity, price in itertools.product(instruments, granularities, prices):
             dummy_data = Data(symbol=instrument, start=start, end=end, granularity=granularity, price=price, df=[])
@@ -43,8 +58,12 @@ class Trader:
                 print(f'Loading from file: {instrument} data from {start} to {end} with granularity {granularity} and price {price}')
                 self.data.append(dummy_data.load())
             else:
-                print(f'Fetching from broker: {instrument} data from {start} to {end} with granularity {granularity} and price {price}')
-                self.data.append(self.broker.get_data(instrument, start, end, granularity, price))
+                print(f'Fetching from {broker}: {instrument} data from {start} to {end} with granularity {granularity} and price {price}')
+                if broker_instance:
+                    self.data.append(broker_instance.get_data(instrument, start, end, granularity, price))
+                else:
+                    raise ValueError("No broker instance added. Please add a broker using `.add_broker()`")
+
 
     def remove_data(self, index):
         data = self.data.pop(index)
@@ -68,7 +87,7 @@ class Trader:
         elif data:
             data.save()
 
-    def plot_bid_ask_candles(self, bid: int, ask: int):
+    def plot_bid_ask_candles(self, bid: int, ask: int, equal_instruments=True):
         """Creates a plot with bid and ask candles.
 
         Parameters
@@ -79,7 +98,8 @@ class Trader:
         bid_data: Data = self.data[bid]
         ask_data: Data = self.data[ask]
 
-        Data.assert_data_with_same_symbol(bid_data, ask_data)
+        if equal_instruments:
+            Data.assert_data_with_same_symbol(bid_data, ask_data)
 
         granularity_val = Data.assert_data_with_same_granularity(bid_data, ask_data)
 
