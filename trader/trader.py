@@ -1,5 +1,6 @@
 import os
 import datetime
+import itertools
 import pandas as pd
 
 import plotly.graph_objects as go
@@ -22,26 +23,28 @@ class Trader:
 
         self.data = []
 
-    def add_data(self, instruments, **kwargs):
+    def add_data(self, instruments, start=None, end=None, granularities='1H', prices='M'):
         today = datetime.datetime.utcnow().date().strftime('%Y-%m-%d')
         seven_days_ago = (datetime.datetime.utcnow() - datetime.timedelta(days=7)).date().strftime('%Y-%m-%d')
 
         # Default values
-        start = kwargs.get('start', seven_days_ago)
-        end = kwargs.get('end', today)
-        granularity = kwargs.get('granularity', '1H')
-        price = kwargs.get('price', 'M')
+        start = seven_days_ago if not start else start
+        end = today if not end else end
+
+        # Force to lists
+        instruments = [instruments] if not isinstance(instruments, list) else instruments
+        granularities = [granularities] if not isinstance(granularities, list) else granularities
+        prices = [prices] if not isinstance(prices, list) else prices
 
         # Check if data is locally available
-        for instrument in instruments:
-            for p in price:
-                dummy_data = Data(symbol=instrument, start=start, end=end, granularity=granularity, price=p, df=[])
-                if os.path.exists(dummy_data.default_filename):
-                    print(f'Loading from file: {instrument} data from {start} to {end} with granularity {granularity} and price {p}')
-                    self.data.append(dummy_data.load())
-                else:
-                    print(f'Fetching from broker: {instrument} data from {start} to {end} with granularity {granularity} and price {p}')
-                    self.data.append(self.broker.get_data(instrument, start, end, granularity, p))
+        for instrument, granularity, price in itertools.product(instruments, granularities, prices):
+            dummy_data = Data(symbol=instrument, start=start, end=end, granularity=granularity, price=price, df=[])
+            if os.path.exists(dummy_data.default_filename):
+                print(f'Loading from file: {instrument} data from {start} to {end} with granularity {granularity} and price {price}')
+                self.data.append(dummy_data.load())
+            else:
+                print(f'Fetching from broker: {instrument} data from {start} to {end} with granularity {granularity} and price {price}')
+                self.data.append(self.broker.get_data(instrument, start, end, granularity, price))
 
     def remove_data(self, index):
         data = self.data.pop(index)

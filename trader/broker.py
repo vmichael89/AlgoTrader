@@ -231,7 +231,6 @@ class PolygonAPI(Broker):
         while True:
             response = requests.get(url=url, headers=self.HEADERS)
             aggs = response.json()
-            print(aggs)
             data.extend(aggs['results'])
             if "next_url" in aggs:
                 url = aggs["next_url"]
