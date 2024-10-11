@@ -93,12 +93,11 @@ class Broker(ABC):
         """Fetch and transform historical data for the specified instruments."""
 
         # Convert granularity to timedelta
-        granularity_timedelta = pd.to_timedelta(granularity)
-        if granularity_timedelta not in self.GRANULARITY_MAP:
+        if granularity not in self.GRANULARITY_MAP:
             raise ValueError(f"Granularity {granularity} is not valid or not supported.")
 
         # Fetch broker-specific data
-        df_data = self._fetch_broker_data(instrument, start, end, granularity_timedelta, price)
+        df_data = self._fetch_broker_data(instrument, start, end, granularity, price)
 
         # Rename columns using the shared mapping
         df_data = df_data.rename(columns=self.COLUMN_MAPPING)
