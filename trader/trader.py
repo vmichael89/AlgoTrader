@@ -26,9 +26,10 @@ class Trader:
         today = datetime.datetime.utcnow().date().strftime('%Y-%m-%d')
         seven_days_ago = (datetime.datetime.utcnow() - datetime.timedelta(days=7)).date().strftime('%Y-%m-%d')
 
+        # Default values
         start = kwargs.get('start', seven_days_ago)
         end = kwargs.get('end', today)
-        granularity = kwargs.get('granularity', 'H1')
+        granularity = kwargs.get('granularity', '1H')
         price = kwargs.get('price', 'M')
 
         # Check if data is locally available
@@ -77,14 +78,14 @@ class Trader:
 
         Data.assert_data_with_same_symbol(bid_data, ask_data)
 
-        granularity = Data.assert_data_with_same_granularity(bid_data, ask_data)
+        granularity_val = Data.assert_data_with_same_granularity(bid_data, ask_data)
 
         # Initialize figure
         fig = go.Figure(data=[bid_data.plot_data(), ask_data.plot_data()])
         fig.update_layout(xaxis_rangeslider_visible=False)
 
         # Modify figure: shift-left bid candles and shift-right ask candles
-        td = granularity / 8
+        td = granularity_val / 8
         adjusted_bid_index = bid_data.df.index - td
         adjusted_ask_index = ask_data.df.index + td
         fig.data[0].x = adjusted_bid_index
@@ -105,8 +106,8 @@ class Trader:
 
         Data.assert_data_with_same_symbol(low_gran_data, high_gran_data)
 
-        low_granularity = low_gran_data.get_most_occurring_granularity()
-        high_granularity = high_gran_data.get_most_occurring_granularity()
+        low_granularity = low_gran_data.granularity_value
+        high_granularity = high_gran_data.granularity_value
 
         # Initialize figure
         fig = go.Figure(data=[low_gran_data.plot_data(), high_gran_data.plot_data()],

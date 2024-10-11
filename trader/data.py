@@ -1,4 +1,5 @@
 import os
+import re
 import pandas as pd
 import pandas_ta as ta
 import plotly.graph_objects as go
@@ -23,7 +24,8 @@ class Data:
         self.indicators = []  # Not implemented yet
 
     def __repr__(self):
-        return '.'.join([self.symbol, self.price, self.granularity, self.start, self.end])
+        sanitized_symbol = re.sub(r'[<>:"/\\|?*]', '_', self.symbol)
+        return '.'.join([sanitized_symbol, self.price, self.granularity, self.start, self.end])
 
     @property
     def default_filename(self):
@@ -32,6 +34,17 @@ class Data:
     @property
     def num_candles(self):
         return len(self.df)
+
+    @property
+    def granularity_value(self):
+        multiplier, unit = re.match(r'(\d+)(\w+)', '28D').groups()
+        if unit == 'M':
+            value = str(int(multiplier) * 30) + 'D'
+        elif unit == 'Y':
+            value = str(int(multiplier) * 356) + 'D'
+        else:
+            value = self.granularity
+        return pd.to_timedelta(value)
 
     @staticmethod
     def assert_data_with_same_symbol(data1: 'Data', data2: 'Data'):
@@ -43,15 +56,11 @@ class Data:
 
     @staticmethod
     def assert_data_with_same_granularity(data1: 'Data', data2: 'Data'):
-        # Get granularities from most occurring time difference
-        granularity1 = data1.get_most_occurring_granularity()
-        granularity2 = data2.get_most_occurring_granularity()
+        granularity1 = data1.granularity_value
+        granularity2 = data2.granularity_value
         if granularity1 != granularity2:
             raise Exception(f'Incompatible granularity {granularity1} and {granularity2}.')
         return granularity1
-
-    def get_most_occurring_granularity(self):
-        return self.df.index.to_series().diff().value_counts().index[0]
 
     def save(self, filepath=None, folderpath=None):
         """Saves data's dataframe in pickle format.
