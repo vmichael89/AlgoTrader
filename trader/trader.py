@@ -13,7 +13,7 @@ class Trader:
     broker_names = {'oanda': OandaBroker, 'polygon': PolygonAPI}
 
     def __init__(self, broker=list(broker_names.keys())[0]):
-        # Check if `broker`is in implemented broker_names
+        # Check if `broker` is in implemented broker_names
         if broker in self.broker_names:
             self.broker = self.broker_names[broker]()
         else:
@@ -40,8 +40,8 @@ class Trader:
                     print(f'Loading from file: {instrument} data from {start} to {end} with granularity {granularity} and price {p}')
                     self.data.append(dummy_data.load())
                 else:
-                    print(f'Fetching from broker: {instruments} data from {start} to {end} with granularity {granularity} and price {p}')
-                    self.data.extend(self.broker.get_data(instrument, start, end, granularity, p))
+                    print(f'Fetching from broker: {instrument} data from {start} to {end} with granularity {granularity} and price {p}')
+                    self.data.append(self.broker.get_data(instrument, start, end, granularity, p))
 
     def remove_data(self, index):
         data = self.data.pop(index)

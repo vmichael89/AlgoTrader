@@ -1,7 +1,6 @@
 from abc import ABC, abstractmethod
 from pathlib import Path
 import threading
-import json
 import requests
 
 import pandas as pd
@@ -66,6 +65,10 @@ class OandaAPI(tpqoa.tpqoa):
 
 class Broker(ABC):
 
+    @classmethod
+    def __repr__(cls):
+        return cls.__class__.__name__  # Returns the class name
+
     @property
     @abstractmethod
     def COLUMN_MAPPING(self):
@@ -78,13 +81,33 @@ class Broker(ABC):
         """Must return a dictionary for granularity mapping."""
         pass
 
-    @classmethod
-    def __repr__(cls):
-        return cls.__class__.__name__  # Returns the class name
-
     @abstractmethod
-    def get_data(self, instruments, start, end, granularity, price):
+    def _fetch_broker_data(self, instrument, start, end, granularity, price):
+        """
+        Broker-specific method to fetch raw data from the broker's API.
+        Must return a dataframe with OHLC values and a datetime index.
+        """
         pass
+
+    def get_data(self, instrument, start, end, granularity, price):
+        """Fetch and transform historical data for the specified instruments."""
+
+        # Convert granularity to timedelta
+        granularity_timedelta = pd.to_timedelta(granularity)
+        if granularity_timedelta not in self.GRANULARITY_MAP:
+            raise ValueError(f"Granularity {granularity} is not valid or not supported.")
+
+        # Fetch broker-specific data
+        df_data = self._fetch_broker_data(instrument, start, end, granularity_timedelta, price)
+
+        # Rename columns using the shared mapping
+        df_data = df_data.rename(columns=self.COLUMN_MAPPING)
+        df_data.index.name = Data.INDEX
+
+        # Wrap the transformed data in the Data class
+        data = Data(instrument, start, end, granularity, price, df_data)
+
+        return data
 
 
 class OandaBroker(Broker):
@@ -102,123 +125,140 @@ class OandaBroker(Broker):
     @property
     def GRANULARITY_MAP(self):
         return {
-            pd.to_timedelta('5S'): 'S5',
-            pd.to_timedelta('10S'): 'S10',
-            pd.to_timedelta('15S'): 'S15',
-            pd.to_timedelta('30S'): 'S30',
-            pd.to_timedelta('1min'): 'M1',
-            pd.to_timedelta('2min'): 'M2',
-            pd.to_timedelta('4min'): 'M4',
-            pd.to_timedelta('5min'): 'M5',
-            pd.to_timedelta('10min'): 'M10',
-            pd.to_timedelta('15min'): 'M15',
-            pd.to_timedelta('30min'): 'M30',
-            pd.to_timedelta('1H'): 'H1',
-            pd.to_timedelta('2H'): 'H2',
-            pd.to_timedelta('3H'): 'H3',
-            pd.to_timedelta('4H'): 'H4',
-            pd.to_timedelta('6H'): 'H6',
-            pd.to_timedelta('8H'): 'H8',
-            pd.to_timedelta('12H'): 'H12',
-            pd.to_timedelta('1D'): 'D',
-            pd.to_timedelta('1W'): 'W',
-            pd.to_timedelta('1M'): 'M'
+            '5S': 'S5',
+            '10S': 'S10',
+            '15S': 'S15',
+            '30S': 'S30',
+            '1min': 'M1',
+            '2min': 'M2',
+            '4min': 'M4',
+            '5min': 'M5',
+            '10min': 'M10',
+            '15min': 'M15',
+            '30min': 'M30',
+            '1H': 'H1',
+            '2H': 'H2',
+            '3H': 'H3',
+            '4H': 'H4',
+            '6H': 'H6',
+            '8H': 'H8',
+            '12H': 'H12',
+            '1D': 'D',
+            '1W': 'W',
+            '1M': 'M'
         }
 
     def __init__(self):
         self.api = OandaAPI((Path('.') / 'config' / 'oanda.cfg').resolve().__str__())
         self.instruments = type('Instruments', (object,), {instr[1]: instr[1] for instr in self.api.get_instruments()})()
 
-    def get_data(self, instruments, start, end, granularity, price):
-        """
-        Fetch historical data for the specified instruments from Oanda.
-
-        :param instruments: List of instruments (e.g., ['EUR_USD', 'GBP_USD'])
-        :param start: Start date for the historical data (e.g., '2024-07-29')
-        :param end: End date for the historical data (e.g., '2024-08-20')
-        :param granularity: Time interval for data (e.g., 'H1' for 1-hour candles)
-        :param price: Price type ('M' for mid prices)
-        :return: Dictionary of dataframes, each corresponding to one instrument
-        """
-
-        if isinstance(instruments, str):
-            instruments = [instruments]
-
-        # Check if granularity is in the map, if not raise an error
-        granularity_timedelta = pd.to_timedelta(granularity)
-        if granularity_timedelta not in self.GRANULARITY_MAP:
-            raise ValueError(f"Granularity {granularity} is not valid or not supported.")
-
-        datas = []
-
-        for instr in instruments:
-
-            # Get historical data for the instrument
-            df_data = self.api.get_history(
-                instrument=instr,
-                start=start,
-                end=end,
-                granularity=self.GRANULARITY_MAP[granularity_timedelta],
-                price=price,
-                localize=False
-            )
-
-            # Rename columns
-            df_data = df_data.rename(columns=self.COLUMN_MAPPING)
-            df_data.index.name = Data.INDEX
-
-            data = Data(instr, start, end, granularity_timedelta, price, df_data)
-
-            datas.append(data)
-
-        return datas
+    def _fetch_broker_data(self, instrument, start, end, granularity, price):
+        return self.api.get_history(
+            instrument=instrument,
+            start=start,
+            end=end,
+            granularity=self.GRANULARITY_MAP[granularity],
+            price=price,
+            localize=False
+        )
 
     def stream_data(self, instrument):
         self.api.stream_data(instrument)
 
 
 class PolygonAPI(Broker):
+
+    @property
+    def COLUMN_MAPPING(self):
+        return {
+            'o': Data.OPEN,
+            'h': Data.HIGH,
+            'l': Data.LOW,
+            'c': Data.CLOSE,
+            'v': Data.VOLUME,
+        }
+
+    @property
+    def GRANULARITY_MAP(self):
+        return {
+            '5S': ('second', 1),
+            '10S': ('second', 10),
+            '15S': ('second', 15),
+            '30S': ('second', 30),
+            '1min': ('minute', 1),
+            '2min': ('minute', 2),
+            '4min': ('minute', 4),
+            '5min': ('minute', 5),
+            '10min': ('minute', 10),
+            '15min': ('minute', 15),
+            '30min': ('minute', 30),
+            '1H': ('hour', 1),
+            '2H': ('hour', 2),
+            '3H': ('hour', 3),
+            '4H': ('hour', 4),
+            '6H': ('hour', 6),
+            '8H': ('hour', 8),
+            '12H': ('hour', 12),
+            '1D': ('day', 1),
+            '1W': ('week', 1),
+            '1M': ('month', 1),
+            '3M': ('month', 3),
+            '4M': ('month', 4),
+            '6M': ('month', 6),
+            '1Y': ('year', 1),
+            '5Y': ('year', 5),
+        }
+
     def __init__(self):
         with open(Path('.') / 'config' / 'polygon.cfg', 'r') as f:
             self.API_KEY = f.read()
 
-    def get_data(self, instruments, start, end, granularity, price='M', log=False):
-        headers = {"Authorization": "Bearer " + self.API_KEY}
+        self.HEADERS = {"Authorization": "Bearer " + self.API_KEY}
 
-        datas = {}
+        self.tickers_api = (
+            lambda instrument:
+            f'https://api.polygon.io/v3/reference/tickers?ticker={instrument}'
+        )
 
-        for instrument in instruments:
-            print(f"Fetching data for {instrument}")
+        self.aggregates_api = (
+            lambda instrument, granularity_value, granularity_type, start, end:
+            f'https://api.polygon.io/v2/aggs/ticker/{instrument}/range/{granularity_value}'
+            f'/{granularity_type}/{start}/{end}?adjusted=true&sort=asc&limit=50000'
+        )
 
-            data = []
+    def _request(self, url):
+        """Polygon-specific wrapper to request all data."""
+        data = []
+        while True:
+            response = requests.get(url=url, headers=self.HEADERS)
+            aggs = response.json()
+            print(aggs)
+            data.extend(aggs['results'])
+            if "next_url" in aggs:
+                url = aggs["next_url"]
+            else:
+                return data
 
-            url = f'https://api.polygon.io/v2/aggs/ticker/{instrument}/range/{granularity[0]}/{granularity[1]}/{start}/{end}?adjusted=true&sort=asc&limit=50000&apiKey={self.API_KEY}'
-            while True:
-                aggs = json.loads(requests.get(url, headers=headers).text)
+    def _fetch_broker_data(self, instrument, start, end, granularity, price='M'):
 
-                if aggs["resultsCount"] == 0:
-                    break
+        granularity_type, granularity_value = self.GRANULARITY_MAP[granularity]
 
-                data.extend(aggs['results'])
+        # Check if instrument is valid
+        tickers_url = self.tickers_api(instrument)
+        tickers_data = self._request(tickers_url)
+        if len(tickers_data) == 0:
+            raise ValueError(f"Instrument '{instrument}' is not valid.")
 
-                if "next_url" in aggs:
-                    url = aggs["next_url"]
-                else:
-                    break
+        # Get aggregates (bars/candles) and create a dataframe
+        agg_url = self.aggregates_api(instrument, granularity_value, granularity_type, start, end)
+        agg_data = self._request(agg_url)
+        df = pd.DataFrame(agg_data)
+        df['t'] = pd.to_datetime(df['t'], unit='ms')
+        df.set_index('t', inplace=True)
 
-            df = pd.DataFrame(data)
+        # if timezone=="new york":
+        # df.index = df.index.tz_localize('UTC')
+        # df.index = df.index.tz_convert('America/New_York')
+        # df.index = df.index.tz_localize(None)
 
-            df.drop(columns=['vw', 'n'], inplace=True)
-            df.rename(columns={'o': 'open', 'c': 'close', 'h': 'high', 'l': 'low', 'v': 'volume', 't': 'date'},
-                      inplace=True)
-            df['datetime'] = pd.to_datetime(df['datetime'], unit='ms')
-            df.set_index('datetime', inplace=True)
-
-            # if timezone=="new york":
-            df.index = df.index.tz_localize('UTC')
-            df.index = df.index.tz_convert('America/New_York')
-            df.index = df.index.tz_localize(None)
-
-            datas[instrument] = df
-
-        return datas
+        return df
