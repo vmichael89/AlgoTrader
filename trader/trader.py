@@ -64,7 +64,6 @@ class Trader:
                 else:
                     raise ValueError("No broker instance added. Please add a broker using `.add_broker()`")
 
-
     def remove_data(self, index):
         data = self.data.pop(index)
         print(f'Removed {data}')
@@ -86,6 +85,11 @@ class Trader:
 
         elif data:
             data.save()
+
+    def add_indicator(self, indicator, *args, **kwargs):
+        """Add a TALib-alike indicator in the form of (function, kwargs of the function)."""
+        for data in self.data:
+            data.add_indicator(indicator, *args, **kwargs)
 
     def plot_bid_ask_candles(self, bid: int, ask: int, equal_instruments=True):
         """Creates a plot with bid and ask candles.

@@ -3,6 +3,7 @@ import re
 import pandas as pd
 import pandas_ta as ta
 import plotly.graph_objects as go
+from .algos.directional_change import dc
 
 
 class Data:
@@ -88,8 +89,14 @@ class Data:
             pd.DataFrame(data={'open': o, 'high': h, 'low': l, 'close': c, 'volume': volume}, index=[time])
         ])
 
-    def add_indicator(self):
-        pass
+    def add_indicator(self, indicator, *args, **kwargs):
+        """Add a TALib-alike indicator in the form of (function, kwargs of the function)."""
+        if indicator == 'dc':
+            # use trader library
+            self.df['DC'] = dc(self.df['high'], self.df['low'], *args, **kwargs)
+        else:
+            # use ta library
+            self.df.ta(kind=indicator, *args, **kwargs, append=True)
 
     def plot_data(self):
         graph_obj = go.Candlestick(
@@ -108,7 +115,23 @@ class Data:
         )
         return graph_obj
 
+    def plot_indicator(self):
+        graph_objs = []
+        for col in self.df.columns:
+            if col in [Data.OPEN, Data.HIGH, Data.LOW, Data.CLOSE, Data.VOLUME, 'complete']:
+                continue
+            data = self.df[col].dropna()
+            graph_objs.append(
+                go.Scatter(
+                    name=col,
+                    x=data.index,
+                    y=data.values,
+                    mode='lines' if len(data.value_counts()) > 3 else 'markers'
+                )
+            )
+        return graph_objs
+
     def plot(self):
-        fig = go.Figure(data=self.plot_data())
+        fig = go.Figure(data=[self.plot_data(), *self.plot_indicator()])
         fig.update_layout(xaxis_rangeslider_visible=False)
         fig.show(renderer='browser')

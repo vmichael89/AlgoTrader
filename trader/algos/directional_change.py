@@ -1,18 +1,11 @@
-import os
-from pathlib import Path
-
 import pandas as pd
 
 import matplotlib.pyplot as plt
-import matplotlib.ticker as mticker
 import matplotlib.dates as mdates
-from matplotlib.widgets import Slider
 
-try:
-    import tpqoa
-    API_INSTALLED = True
-except ModuleNotFoundError as api_not_installed_error:
-    API_INSTALLED = False
+
+def dc(high, low, sigma=0.001):
+    pass
 
 
 class DirectionalChange:
