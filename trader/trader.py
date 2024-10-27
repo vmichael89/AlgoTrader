@@ -25,10 +25,10 @@ class Trader:
             available_brokers = ', '.join(cls.__name__ for cls in self.broker_names.values())
             raise KeyError(f'`{broker}` not available in brokers: {available_brokers}')
 
-    def add_data(self, instruments, start=None, end=None, granularities='1H', prices='M', broker=None):
+    def add_data(self, instruments, start=None, end=None, granularities='1H', prices='M', broker=None, days=7):
 
         today = datetime.datetime.utcnow().date().strftime('%Y-%m-%d')
-        seven_days_ago = (datetime.datetime.utcnow() - datetime.timedelta(days=7)).date().strftime('%Y-%m-%d')
+        seven_days_ago = (datetime.datetime.utcnow() - datetime.timedelta(days=days)).date().strftime('%Y-%m-%d')
 
         # Default values
         start = seven_days_ago if not start else start

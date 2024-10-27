@@ -5,7 +5,7 @@ from trader.trader import Trader
 
 trader = Trader()
 trader.add_broker('oanda')
-trader.add_data(instruments='EUR_USD', granularities='15min')
+trader.add_data(instruments='EUR_USD', granularities='15min', days=15)
 
 # add indicator from ta-lib (see ta.Category for which indicators are available)
 trader.add_indicator('bbands')
