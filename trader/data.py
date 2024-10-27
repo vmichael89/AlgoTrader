@@ -97,6 +97,8 @@ class Data:
         else:
             # use ta library
             self.df.ta(kind=indicator, *args, **kwargs, append=True)
+            if indicator == 'bbands':
+                self.df.drop(self.df.columns[[-2, -1]], axis=1, inplace=True)
 
     def plot_data(self):
         graph_obj = go.Candlestick(
@@ -126,12 +128,28 @@ class Data:
                     name=col,
                     x=data.index,
                     y=data.values,
-                    mode='lines' if len(data.value_counts()) > 3 else 'markers'
+                    mode='lines',# if len(data.value_counts()) > 3 else 'markers',
+                    connectgaps=True
                 )
             )
         return graph_objs
 
     def plot(self):
         fig = go.Figure(data=[self.plot_data(), *self.plot_indicator()])
-        fig.update_layout(xaxis_rangeslider_visible=False)
+        # Hide timestamps without data (weekends)
+        full_range = pd.date_range(*self.df.iloc[[0, -1]].index, freq=self.granularity_value)
+        missing_ts = full_range.difference(self.df.index)
+        fig.update_xaxes(
+            rangeslider_visible=False,
+            rangebreaks=[dict(values=missing_ts, dvalue=self.granularity_value.value/1e6)],
+            dtick=7*24*60*60*1000,
+            ticklabelmode="period",
+            tickcolor="black",
+            ticklen=10,
+            minor=dict(
+                ticklen=4,
+                dtick=24*60*60*1000,
+                tick0='2024-11-14'
+            )
+        )
         fig.show(renderer='browser')
