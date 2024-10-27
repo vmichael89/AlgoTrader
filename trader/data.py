@@ -93,7 +93,7 @@ class Data:
         """Add a TALib-alike indicator in the form of (function, kwargs of the function)."""
         if indicator == 'dc':
             # use trader library
-            self.df['DC'] = dc(self.df['high'], self.df['low'], *args, **kwargs)
+            dc(self.df, *args, **kwargs)
         else:
             # use ta library
             self.df.ta(kind=indicator, *args, **kwargs, append=True)
