@@ -6,24 +6,27 @@ import matplotlib.dates as mdates
 
 def dc(df, sigma=0.001):
 
+    extreme_col = f'DC_{sigma}_extreme'
+    overshoot_col = f'DC_{sigma}_overshoot'
+
     def save_overshoot(time=None, val=None):
         """Saves `last_overshoot` at `timestamp` from outer scope if not specified"""
         if not time:
             time = timestamp
         if not val:
             val = last_overshoot
-        df.loc[time, 'DC_overshoot'] = val
+        df.loc[time, overshoot_col] = val
 
     def save_extreme():
         # get value and index from last saved overshoot event
-        extreme_index = df['DC_overshoot'].dropna().index[-1]
-        extreme_value = df['DC_overshoot'].dropna().iloc[-1]
+        extreme_index = df[overshoot_col].dropna().index[-1]
+        extreme_value = df[overshoot_col].dropna().iloc[-1]
         # save
-        df.loc[extreme_index, 'DC_extreme'] = extreme_value
+        df.loc[extreme_index, extreme_col] = extreme_value
         # df.loc[extreme_index, 'DC_conf_time'] = timestamp
 
     # Initializations
-    df[['DC_extreme', 'DC_overshoot']] = pd.NA
+    df[[extreme_col, overshoot_col]] = pd.NA
     # df['DC_conf_time'] = pd.NaT
     # df['DC_conf_time'] = df['DC_conf_time'].dt.tz_localize('UTC')
     up_zig = False  # tracks if current trend is upwards
@@ -60,6 +63,8 @@ def dc(df, sigma=0.001):
             elif down_zig := low <= last_overshoot - sigma:
                 up_zig = False
                 save_extreme()
+                last_overshoot = low
+                save_overshoot()
 
         elif down_zig:
             if undershoot_event := low < last_overshoot:
@@ -68,6 +73,8 @@ def dc(df, sigma=0.001):
             elif up_zig := high >= last_overshoot + sigma:
                 down_zig = False
                 save_extreme()
+                last_overshoot = high
+                save_overshoot()
 
 
 class DirectionalChange:
