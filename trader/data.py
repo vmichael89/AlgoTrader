@@ -134,22 +134,32 @@ class Data:
             )
         return graph_objs
 
-    def plot(self):
+    def plot(self, *args, **kwargs):
         fig = go.Figure(data=[self.plot_data(), *self.plot_indicator()])
         # Hide timestamps without data (weekends)
         full_range = pd.date_range(*self.df.iloc[[0, -1]].index, freq=self.granularity_value)
         missing_ts = full_range.difference(self.df.index)
         fig.update_xaxes(
-            rangeslider_visible=False,
+            rangeslider_visible=True,
             rangebreaks=[dict(values=missing_ts, dvalue=self.granularity_value.value/1e6)],
-            dtick=7*24*60*60*1000,
-            ticklabelmode="period",
-            tickcolor="black",
-            ticklen=10,
-            minor=dict(
-                ticklen=4,
-                dtick=24*60*60*1000,
-                tick0='2024-11-14'
-            )
+            rangeselector=dict(
+                buttons=[
+                    dict(count=30, label='30min', step='minute'),
+                    dict(count=1, label='1h', step='hour'),
+                    dict(count=3, label='3h', step='hour'),
+                    dict(count=6, label='6h', step='hour'),
+                    dict(count=1, label='1d', step='day'),
+                    dict(count=3, label='3d', step='day'),
+                    dict(count=7, label='1w', step='day'),
+                    dict(count=1, label='1m', step='month'),
+                    dict(count=3, label='3m', step='month'),
+                    dict(count=1, label='1y', step='year'),
+                    dict(step='all')
+                ]
+            ),
         )
-        fig.show(renderer='browser')
+        fig.update_xaxes(fixedrange=False)
+        fig.update_yaxes(fixedrange=False)
+        fig.show(*args, **kwargs)
+
+        return fig

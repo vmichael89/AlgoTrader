@@ -119,6 +119,7 @@ class Trader:
         fig.data[1].x = adjusted_ask_index
 
         fig.show(renderer='browser')
+        return fig
 
     def plot_dual_timeframe(self, low_timeframe: int, high_timeframe: int):
         """Creates a plot with bid and ask candles.
@@ -161,3 +162,4 @@ class Trader:
                         ))
         fig.update_traces(selector=dict(name=str(high_gran_data)), xaxis='x2')
         fig.show(renderer='browser')
+        return fig
