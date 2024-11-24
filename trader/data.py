@@ -3,6 +3,7 @@ import re
 import pandas as pd
 import pandas_ta as ta
 import plotly.graph_objects as go
+from .algos.directional_change import dc
 
 
 class Data:
@@ -88,8 +89,16 @@ class Data:
             pd.DataFrame(data={'open': o, 'high': h, 'low': l, 'close': c, 'volume': volume}, index=[time])
         ])
 
-    def add_indicator(self):
-        pass
+    def add_indicator(self, indicator, *args, **kwargs):
+        """Add a TALib-alike indicator in the form of (function, kwargs of the function)."""
+        if indicator == 'dc':
+            # use trader library
+            dc(self.df, *args, **kwargs)
+        else:
+            # use ta library
+            self.df.ta(kind=indicator, *args, **kwargs, append=True)
+            if indicator == 'bbands':
+                self.df.drop(self.df.columns[[-2, -1]], axis=1, inplace=True)
 
     def plot_data(self):
         graph_obj = go.Candlestick(
@@ -108,7 +117,49 @@ class Data:
         )
         return graph_obj
 
-    def plot(self):
-        fig = go.Figure(data=self.plot_data())
-        fig.update_layout(xaxis_rangeslider_visible=False)
-        fig.show(renderer='browser')
+    def plot_indicator(self):
+        graph_objs = []
+        for col in self.df.columns:
+            if col in [Data.OPEN, Data.HIGH, Data.LOW, Data.CLOSE, Data.VOLUME, 'complete']:
+                continue
+            data = self.df[col].dropna()
+            graph_objs.append(
+                go.Scatter(
+                    name=col,
+                    x=data.index,
+                    y=data.values,
+                    mode='lines',# if len(data.value_counts()) > 3 else 'markers',
+                    connectgaps=True
+                )
+            )
+        return graph_objs
+
+    def plot(self, *args, **kwargs):
+        fig = go.Figure(data=[self.plot_data(), *self.plot_indicator()])
+        # Hide timestamps without data (weekends)
+        full_range = pd.date_range(*self.df.iloc[[0, -1]].index, freq=self.granularity_value)
+        missing_ts = full_range.difference(self.df.index)
+        fig.update_xaxes(
+            rangeslider_visible=True,
+            rangebreaks=[dict(values=missing_ts, dvalue=self.granularity_value.value/1e6)],
+            rangeselector=dict(
+                buttons=[
+                    dict(count=30, label='30min', step='minute'),
+                    dict(count=1, label='1h', step='hour'),
+                    dict(count=3, label='3h', step='hour'),
+                    dict(count=6, label='6h', step='hour'),
+                    dict(count=1, label='1d', step='day'),
+                    dict(count=3, label='3d', step='day'),
+                    dict(count=7, label='1w', step='day'),
+                    dict(count=1, label='1m', step='month'),
+                    dict(count=3, label='3m', step='month'),
+                    dict(count=1, label='1y', step='year'),
+                    dict(step='all')
+                ]
+            ),
+        )
+        fig.update_xaxes(fixedrange=False)
+        fig.update_yaxes(fixedrange=False)
+        fig.show(*args, **kwargs)
+
+        return fig

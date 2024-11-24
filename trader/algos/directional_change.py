@@ -1,18 +1,80 @@
-import os
-from pathlib import Path
-
 import pandas as pd
 
 import matplotlib.pyplot as plt
-import matplotlib.ticker as mticker
 import matplotlib.dates as mdates
-from matplotlib.widgets import Slider
 
-try:
-    import tpqoa
-    API_INSTALLED = True
-except ModuleNotFoundError as api_not_installed_error:
-    API_INSTALLED = False
+
+def dc(df, sigma=0.001):
+
+    extreme_col = f'DC_{sigma}_extreme'
+    overshoot_col = f'DC_{sigma}_overshoot'
+
+    def save_overshoot(time=None, val=None):
+        """Saves `last_overshoot` at `timestamp` from outer scope if not specified"""
+        if not time:
+            time = timestamp
+        if not val:
+            val = last_overshoot
+        df.loc[time, overshoot_col] = val
+
+    def save_extreme():
+        # get value and index from last saved overshoot event
+        extreme_index = df[overshoot_col].dropna().index[-1]
+        extreme_value = df[overshoot_col].dropna().iloc[-1]
+        # save
+        df.loc[extreme_index, extreme_col] = extreme_value
+        # df.loc[extreme_index, 'DC_conf_time'] = timestamp
+
+    # Initializations
+    df[[extreme_col, overshoot_col]] = pd.NA
+    # df['DC_conf_time'] = pd.NaT
+    # df['DC_conf_time'] = df['DC_conf_time'].dt.tz_localize('UTC')
+    up_zig = False  # tracks if current trend is upwards
+    down_zig = False  # tracks if current trend is downwards
+    last_overshoot = 0  # compared to current high/low to determine overshoot events
+    initial_timestamp = df.index[0]  # only used in trend initialization (while up_zig==down_zig==False)
+    initial_high = df['high'].iloc[0]  # only used in trend initialization (while up_zig==down_zig==False)
+    initial_low = df['low'].iloc[0]  # only used in trend initialization (while up_zig==down_zig==False)
+
+    # loop through df, omit everything except high and low
+    for timestamp, (_, high, low, *_) in df.iterrows():
+
+        # trend initialization / wait for first overshoot event
+        if not (up_zig or down_zig):
+            if down_zig := low <= initial_high - sigma:
+                # save first high as first overshoot and first extreme
+                save_overshoot(initial_timestamp, initial_high)
+                save_extreme()
+                # save time/val from current overshoot event
+                last_overshoot = low
+                save_overshoot()
+            elif up_zig := high >= initial_low + sigma:
+                # save first low as first overshoot and first extreme
+                save_overshoot(initial_timestamp, initial_low)
+                save_extreme()
+                # save time/val from current overshoot event
+                last_overshoot = high
+                save_overshoot()
+
+        elif up_zig:
+            if overshoot_event := high > last_overshoot:
+                last_overshoot = high
+                save_overshoot()
+            elif down_zig := low <= last_overshoot - sigma:
+                up_zig = False
+                save_extreme()
+                last_overshoot = low
+                save_overshoot()
+
+        elif down_zig:
+            if undershoot_event := low < last_overshoot:
+                last_overshoot = low
+                save_overshoot()
+            elif up_zig := high >= last_overshoot + sigma:
+                down_zig = False
+                save_extreme()
+                last_overshoot = high
+                save_overshoot()
 
 
 class DirectionalChange:

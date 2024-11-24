@@ -25,10 +25,10 @@ class Trader:
             available_brokers = ', '.join(cls.__name__ for cls in self.broker_names.values())
             raise KeyError(f'`{broker}` not available in brokers: {available_brokers}')
 
-    def add_data(self, instruments, start=None, end=None, granularities='1H', prices='M', broker=None):
+    def add_data(self, instruments, start=None, end=None, granularities='1H', prices='M', broker=None, days=7):
 
         today = datetime.datetime.utcnow().date().strftime('%Y-%m-%d')
-        seven_days_ago = (datetime.datetime.utcnow() - datetime.timedelta(days=7)).date().strftime('%Y-%m-%d')
+        seven_days_ago = (datetime.datetime.utcnow() - datetime.timedelta(days=days)).date().strftime('%Y-%m-%d')
 
         # Default values
         start = seven_days_ago if not start else start
@@ -64,7 +64,6 @@ class Trader:
                 else:
                     raise ValueError("No broker instance added. Please add a broker using `.add_broker()`")
 
-
     def remove_data(self, index):
         data = self.data.pop(index)
         print(f'Removed {data}')
@@ -86,6 +85,11 @@ class Trader:
 
         elif data:
             data.save()
+
+    def add_indicator(self, indicator, *args, **kwargs):
+        """Add a TALib-alike indicator in the form of (function, kwargs of the function)."""
+        for data in self.data:
+            data.add_indicator(indicator, *args, **kwargs)
 
     def plot_bid_ask_candles(self, bid: int, ask: int, equal_instruments=True):
         """Creates a plot with bid and ask candles.
@@ -115,6 +119,7 @@ class Trader:
         fig.data[1].x = adjusted_ask_index
 
         fig.show(renderer='browser')
+        return fig
 
     def plot_dual_timeframe(self, low_timeframe: int, high_timeframe: int):
         """Creates a plot with bid and ask candles.
@@ -157,3 +162,4 @@ class Trader:
                         ))
         fig.update_traces(selector=dict(name=str(high_gran_data)), xaxis='x2')
         fig.show(renderer='browser')
+        return fig
