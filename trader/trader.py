@@ -91,6 +91,10 @@ class Trader:
         for data in self.data:
             data.add_indicator(indicator, *args, **kwargs)
 
+    def plot(self):
+        figs = [data.plot() for data in self.data]
+        return figs
+
     def plot_bid_ask_candles(self, bid: int, ask: int, equal_instruments=True):
         """Creates a plot with bid and ask candles.
 
