@@ -2,11 +2,12 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 import threading
 import requests
-
+import time
+from datetime import datetime, timezone, timedelta
 import pandas as pd
 import tpqoa
 
-from .data import Data
+from .data import Data, TickData
 
 
 # Inherit standard api class to change streaming behavior
@@ -81,13 +82,15 @@ class Broker(ABC):
         """Must return a dictionary for granularity mapping."""
         pass
 
-    @abstractmethod
     def _fetch_broker_data(self, instrument, start, end, granularity, price):
         """
         Broker-specific method to fetch raw data from the broker's API.
         Must return a dataframe with OHLC values and a datetime index.
         """
-        pass
+        raise NotImplementedError()
+
+    def _fetch_broker_tick_data(self, instrument, start, end):
+        raise NotImplementedError()
 
     def get_data(self, instrument, start, end, granularity, price):
         """Fetch and transform historical data for the specified instruments."""
@@ -107,6 +110,178 @@ class Broker(ABC):
         data = Data(instrument, start, end, granularity, price, df_data)
 
         return data
+
+    def get_tick_data(self, instrument, start, end):
+        df_data = self._fetch_broker_tick_data(instrument, start, end)
+        data = TickData(instrument, start, end, "tick", "BA", df_data)
+        return data
+
+    def market_order(self, instrument, order_size, sl=None, tp=None, magic=0, comment=""):
+        raise NotImplementedError()
+
+    def change_position_sltp(self, position, sl, tp, magic=0, comment=""):
+        raise NotImplementedError()
+
+    def close_position(self, position, volume=None, magic=0, comment=""):
+        raise NotImplementedError()
+
+    def close_all_positions(self, symbol=None, group="*"):
+        raise NotImplementedError()
+
+    def get_positions(self, as_dataframe=True):
+        raise NotImplementedError()
+
+    def get_trades(self, as_dataframe=True):
+        raise NotImplementedError()
+
+
+class MetaTrader(Broker):
+
+    @property
+    def COLUMN_MAPPING(self):
+        return None
+
+    @property
+    def GRANULARITY_MAP(self):
+        return {
+            "tick": "tick"
+        }
+
+    def __init__(self, user="FTMO_DEMO"):
+        import os
+        import MetaTrader5 as mt5
+
+        self.api = mt5
+        mt5.initialize()
+        login = os.environ[f"{user}_LOGIN"]
+        password = os.environ[f"{user}_PASSWORD"]
+        server = os.environ[f"{user}_SERVER"]
+        mt5.login(login=login, password=password, server=server)
+
+    def _isoformat_to_ftmo_time(self, isoformat_time):
+        # FTMO time (GMT+2) has to be a datetime object without timezone info.
+        as_utc_time = datetime.fromisoformat(isoformat_time).replace(tzinfo=timezone.utc)
+        ftmo_time = as_utc_time.astimezone(timezone(timedelta(hours=2)))
+        ftmo_time = ftmo_time.replace(tzinfo=timezone.utc)
+        return ftmo_time
+
+    def _fetch_broker_tick_data(self, instrument, start, end=None):
+        start_time = self._isoformat_to_ftmo_time(start)
+        end_time = self._isoformat_to_ftmo_time(end) if end else self._isoformat_to_ftmo_time(datetime.utcnow().isoformat())
+
+        ticks = self.api.copy_ticks_range(instrument, start_time, end_time, self.api.COPY_TICKS_ALL)
+        df_ticks = pd.DataFrame(ticks)
+        df_ticks['datetime'] = pd.to_datetime(df_ticks['time_msc'], unit='ms')
+        df_ticks['datetime'] = df_ticks['datetime'].dt.tz_localize('Etc/GMT-2')
+        df_ticks.set_index('datetime', inplace=True)
+
+        df_ticks.drop(columns=['time', 'last', 'time_msc', 'flags', 'volume_real'], inplace=True)
+        return df_ticks
+
+    def _order_send(self, action, magic=None, order=None, symbol=None, volume=None, price=None, stoplimit=None, sl=None,
+                    tp=None, deviation=None, type=None, type_filling=None, type_time=None, expiration=None, comment="",
+                    position=None, position_by=None):
+        request = {
+            key: value
+            for key, value in locals().items()
+            if value is not None
+        }
+        order_result = self.api.order_send(request)
+
+        if order_result.retcode != self.api.TRADE_RETCODE_DONE:
+            # Order not filled
+            raise ValueError(order_result.comment)
+        else:
+            if action == self.api.TRADE_ACTION_CLOSE_BY:
+                # Order type "close" doesn't return a position
+                return order_result
+            # Get position
+            positions = self.api.positions_get(ticket=order_result.order)
+            if not positions:
+                time.sleep(0.1)
+                positions = self.api.positions_get(ticket=order_result.order)
+                if not positions:
+                    print(f"Position {order_result.order} could not be returned.")
+            # Position found
+            if positions:
+                position = positions[0]
+                return position
+
+    def market_order(self, instrument, order_size, sl=None, tp=None, magic=0, comment=""):
+        order_type = self.api.ORDER_TYPE_BUY if order_size > 0 else self.api.ORDER_TYPE_SELL
+        return self._order_send(
+            action=self.api.TRADE_ACTION_DEAL,
+            symbol=instrument,
+            volume=abs(order_size),
+            type=order_type,
+            sl=sl,
+            tp=tp,
+            type_filling=self.api.ORDER_FILLING_FOK,
+            magic=magic,
+            comment=comment
+        )
+
+    def change_position_sltp(self, position, sl=None, tp=None, magic=0, comment=""):
+        return self._order_send(
+            action=self.api.TRADE_ACTION_SLTP,
+            position=position.ticket,
+            sl=sl,
+            tp=tp,
+            magic=magic,
+            comment=comment
+        )
+
+    def close_position(self, position, volume=None, magic=0, comment=""):
+        reverse_type = self.api.ORDER_TYPE_SELL \
+            if position.type == self.api.ORDER_TYPE_BUY \
+            else self.api.ORDER_TYPE_BUY
+
+        # Create an opposite market order for the specified volume
+        reverse_position = self._order_send(
+            action=self.api.TRADE_ACTION_DEAL,
+            symbol=position.symbol,
+            volume=volume or position.volume,
+            type=reverse_type,
+            magic=magic,
+            comment=comment or "Close position"
+        )
+
+        # Close the position using the created order
+        return self._order_send(
+            action=self.api.TRADE_ACTION_CLOSE_BY,
+            position=position.ticket,
+            position_by=reverse_position.ticket,
+        )
+
+    def close_all_positions(self, instrument=None, group="*"):
+        if instrument:
+            positions = self.api.positions_get(symbol=instrument)
+        else:
+            positions = self.api.positions_get(group=group)
+        for position in positions:
+            return self.close_position(position)
+
+    def get_positions(self, as_dataframe=False):
+        positions = self.api.positions_get()
+        if as_dataframe:
+            df = pd.DataFrame([position._asdict() for position in positions])
+            df["datetime"] = pd.to_datetime(df["time_msc"], unit="ms")
+            df.set_index("datetime", inplace=True)
+            return df
+        else:
+            return positions
+
+    def get_trades(self, as_dataframe=False):
+        t1 = datetime(2020, 1, 1)
+        t2 = datetime.utcnow() + timedelta(days=1)
+        trades = self.api.history_deals_get(t1, t2)
+        if as_dataframe:
+            df = pd.DataFrame([trade._asdict() for trade in trades])
+            df["datetime"] = pd.to_datetime(df["time_msc"], unit="ms")
+            df.set_index("datetime", inplace=True)
+            return df
+        else:
+            return trades
 
 
 class OandaBroker(Broker):

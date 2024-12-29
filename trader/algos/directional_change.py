@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 
 
-def dc(df, sigma=0.001):
+def dc(df, sigma=0.001, high_colname='high', low_colname='low'):
 
     extreme_col = f'DC_{sigma}_extreme'
     overshoot_col = f'DC_{sigma}_overshoot'
@@ -33,12 +33,13 @@ def dc(df, sigma=0.001):
     down_zig = False  # tracks if current trend is downwards
     last_overshoot = 0  # compared to current high/low to determine overshoot events
     initial_timestamp = df.index[0]  # only used in trend initialization (while up_zig==down_zig==False)
-    initial_high = df['high'].iloc[0]  # only used in trend initialization (while up_zig==down_zig==False)
-    initial_low = df['low'].iloc[0]  # only used in trend initialization (while up_zig==down_zig==False)
+    initial_high = df[high_colname].iloc[0]  # only used in trend initialization (while up_zig==down_zig==False)
+    initial_low = df[low_colname].iloc[0]  # only used in trend initialization (while up_zig==down_zig==False)
 
     # loop through df, omit everything except high and low
-    for timestamp, (_, high, low, *_) in df.iterrows():
-
+    for timestamp, row in df.iterrows():
+        high = row[high_colname]
+        low = row[low_colname]
         # trend initialization / wait for first overshoot event
         if not (up_zig or down_zig):
             if down_zig := low <= initial_high - sigma:

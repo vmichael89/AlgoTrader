@@ -43,6 +43,8 @@ class Data:
             value = str(int(multiplier) * 30) + 'D'
         elif unit == 'Y':
             value = str(int(multiplier) * 356) + 'D'
+        elif self.granularity == 'tick':
+            value = '1S'
         else:
             value = self.granularity
         return pd.to_timedelta(value)
@@ -115,12 +117,12 @@ class Data:
             increasing_line_width=0.5,
             decreasing_line_width=0.5
         )
-        return graph_obj
+        return [graph_obj]
 
     def plot_indicator(self):
         graph_objs = []
         for col in self.df.columns:
-            if col in [Data.OPEN, Data.HIGH, Data.LOW, Data.CLOSE, Data.VOLUME, 'complete']:
+            if col in [Data.OPEN, Data.HIGH, Data.LOW, Data.CLOSE, Data.VOLUME, 'bid', 'ask', 'complete']:
                 continue
             data = self.df[col].dropna()
             graph_objs.append(
@@ -135,13 +137,13 @@ class Data:
         return graph_objs
 
     def plot(self, *args, **kwargs):
-        fig = go.Figure(data=[self.plot_data(), *self.plot_indicator()])
+        fig = go.Figure(data=[*self.plot_data(), *self.plot_indicator()])
         # Hide timestamps without data (weekends)
         full_range = pd.date_range(*self.df.iloc[[0, -1]].index, freq=self.granularity_value)
         missing_ts = full_range.difference(self.df.index)
         fig.update_xaxes(
             rangeslider_visible=True,
-            rangebreaks=[dict(values=missing_ts, dvalue=self.granularity_value.value/1e6)],
+            # rangebreaks=[dict(values=missing_ts, dvalue=self.granularity_value.value/1e6)],
             rangeselector=dict(
                 buttons=[
                     dict(count=30, label='30min', step='minute'),
@@ -163,3 +165,30 @@ class Data:
         fig.show(*args, **kwargs)
 
         return fig
+
+
+class TickData(Data):
+    BID = "bid"
+    ASK = "ask"
+
+    def plot_data(self):
+        graph_objs = [
+            go.Scatter(
+                name=str(self),
+                x=self.df.index,
+                y=self.df.bid,
+                line_color='blue',
+                line_width=.5,
+                mode='lines'
+            ),
+            go.Scatter(
+                name=str(self),
+                x=self.df.index,
+                y=self.df.ask,
+                line_color='green',
+                line_width=.5,
+                mode='lines'
+            )
+        ]
+
+        return graph_objs

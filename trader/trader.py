@@ -5,29 +5,36 @@ import pandas as pd
 
 import plotly.graph_objects as go
 
-from .broker import OandaBroker, PolygonAPI
+from .broker import Broker, OandaBroker, PolygonAPI, MetaTrader
 from .data import Data
 
 
 class Trader:
 
-    broker_names = {'oanda': OandaBroker, 'polygon': PolygonAPI}
+    broker_names = {'mt5': MetaTrader, 'oanda': OandaBroker, 'polygon': PolygonAPI}
 
     def __init__(self):
         self.brokers = {}
+        self.broker = None
         self.data = []
+        self.strategies = []
+        self.positions = []
 
     def add_broker(self, broker):
-        # Check if `broker` is in implemented broker_names
-        if broker in self.broker_names:
-            self.brokers[broker] = self.broker_names[broker]()  # Create broker instance
+        if self.broker:
+            raise ValueError("Broker instance already added.")
         else:
-            available_brokers = ', '.join(cls.__name__ for cls in self.broker_names.values())
-            raise KeyError(f'`{broker}` not available in brokers: {available_brokers}')
+            # Check if `broker` is in implemented broker_names
+            if broker in self.broker_names:
+                self.brokers[broker] = self.broker_names[broker]()  # Create broker instance
+                self.broker = self.broker_names[broker]()
+            else:
+                available_brokers = ', '.join(cls.__name__ for cls in self.broker_names.values())
+                raise KeyError(f'`{broker}` not available in brokers: {available_brokers}')
 
     def add_data(self, instruments, start=None, end=None, granularities='1H', prices='M', broker=None, days=7):
 
-        today = datetime.datetime.utcnow().date().strftime('%Y-%m-%d')
+        today = datetime.datetime.utcnow().isoformat() + 'Z'
         seven_days_ago = (datetime.datetime.utcnow() - datetime.timedelta(days=days)).date().strftime('%Y-%m-%d')
 
         # Default values
@@ -39,18 +46,6 @@ class Trader:
         granularities = [granularities] if not isinstance(granularities, list) else granularities
         prices = [prices] if not isinstance(prices, list) else prices
 
-        # Select a broker, default to the first one in the dictionary if not specified
-        if broker is None:
-            if len(self.brokers) == 0:
-                broker_instance = None
-            else:
-                broker = next(iter(self.brokers.keys()))  # Get the first broker if none is specified
-                broker_instance = self.brokers[broker]
-        elif broker in self.brokers:
-            broker_instance = self.brokers[broker]
-        else:
-            raise KeyError(f'`{broker}` broker not available.')
-
         # Check if data is locally available
         for instrument, granularity, price in itertools.product(instruments, granularities, prices):
             dummy_data = Data(symbol=instrument, start=start, end=end, granularity=granularity, price=price, df=[])
@@ -58,11 +53,11 @@ class Trader:
                 print(f'Loading from file: {instrument} data from {start} to {end} with granularity {granularity} and price {price}')
                 self.data.append(dummy_data.load())
             else:
-                print(f'Fetching from {broker}: {instrument} data from {start} to {end} with granularity {granularity} and price {price}')
-                if broker_instance:
-                    self.data.append(broker_instance.get_data(instrument, start, end, granularity, price))
+                print(f'Fetching from {self.broker}: {instrument} data from {start} to {end} with granularity {granularity} and price {price}')
+                if granularity == 'tick':
+                    self.data.append(self.broker.get_tick_data(instrument, start, end))
                 else:
-                    raise ValueError("No broker instance added. Please add a broker using `.add_broker()`")
+                    self.data.append(self.broker.get_data(instrument, start, end, granularity, price))
 
     def remove_data(self, index):
         data = self.data.pop(index)
@@ -90,6 +85,39 @@ class Trader:
         """Add a TALib-alike indicator in the form of (function, kwargs of the function)."""
         for data in self.data:
             data.add_indicator(indicator, *args, **kwargs)
+
+    def market_order(self, instrument, order_size, sl=None, tp=None, magic=0, comment=""):
+        position = self.broker.market_order(
+            instrument=instrument, order_size=order_size, sl=sl, tp=tp, magic=magic, comment=comment)
+        self.positions.append(position)
+        return position
+
+    def change_position_sltp(self, position, sl=None, tp=None, magic=0, comment=""):
+        return self.broker.change_position_sltp(
+            position=position, sl=sl, tp=tp, magic=magic, comment=comment)
+
+    def close_position(self, position, volume=None):
+        return self.broker.close_position(position)
+
+    def close_all_positions(self, instrument=None, group="*"):
+        self.broker.close_all_positions(instrument=instrument, group=group)
+
+    def get_positions(self, as_dataframe=True):
+        return self.broker.get_positions(as_dataframe=as_dataframe)
+
+    def get_trades(self, as_dataframe=True):
+        return self.broker.get_trades(as_dataframe=as_dataframe)
+
+    def add_strategy(self, strategy):
+        strategy.trader = self
+        self.strategies.append(strategy)
+
+    def backtest(self):
+        for strategy in self.strategies:
+            strategy.backtest()
+
+    def run(self):
+        pass
 
     def plot(self):
         figs = [data.plot() for data in self.data]
