@@ -2,11 +2,11 @@ import os
 import datetime
 import itertools
 import pandas as pd
-
 import plotly.graph_objects as go
-
 from .broker import Broker, OandaBroker, PolygonAPI, MetaTrader
-from .data import Data
+from .data import Data, DataStream
+import threading
+import time
 
 
 class Trader:
@@ -19,6 +19,7 @@ class Trader:
         self.data = []
         self.strategies = []
         self.positions = []
+        self.data_streams = {}
 
     def add_broker(self, broker):
         if self.broker:
@@ -115,11 +116,24 @@ class Trader:
         self.strategies.append(strategy)
 
     def backtest(self):
-        for strategy in self.strategies:
-            strategy.backtest()
-
-    def run(self):
+        # Loop through data, update indicators, and run strategies
         pass
+
+    def add_data_stream(self, instrument, frequency):
+        if instrument not in self.data_streams:
+            data_stream = DataStream(self.broker, instrument, frequency, self.on_new_data)
+            self.data_streams[instrument] = data_stream
+            data_stream.start()
+
+    def on_new_data(self, data):
+        for strategy in self.strategies:
+            if data.symbol in strategy.instruments:
+                strategy.on_new_data(data)
+
+    def run_live(self):
+        for strategy in self.strategies:
+            for instrument in strategy.instruments:
+                self.add_data_stream(instrument, strategy.frequency)
 
     def plot(self):
         figs = [data.plot() for data in self.data]

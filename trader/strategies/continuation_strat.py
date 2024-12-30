@@ -33,6 +33,7 @@ class Strategy:
 	def __init__(self, instrument):
 		self.trader = None
 		self.instrument = instrument
+		self.frequency = None
 		self.name = "Continuation Trade Strategy"
 
 		self.data = None
@@ -54,6 +55,9 @@ class Strategy:
 		self.trade_manager = criteria.CriteriaManager([
 
 		])
+	
+	def on_new_data(self, data):
+		pass
 
 	def step(self):
 		if self.criteria_manger.check():
