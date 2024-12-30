@@ -195,13 +195,17 @@ class MetaTrader(Broker):
             if action == self.api.TRADE_ACTION_CLOSE_BY:
                 # Order type "close" doesn't return a position
                 return order_result
+            elif action == self.api.TRADE_ACTION_SLTP:
+                ticket = position
+            else:
+                ticket = order_result.order
             # Get position
-            positions = self.api.positions_get(ticket=order_result.order)
+            positions = self.api.positions_get(ticket=ticket)
             if not positions:
                 time.sleep(0.1)
-                positions = self.api.positions_get(ticket=order_result.order)
+                positions = self.api.positions_get(ticket=ticket)
                 if not positions:
-                    print(f"Position {order_result.order} could not be returned.")
+                    print(f"Position {ticket} could not be returned.")
             # Position found
             if positions:
                 position = positions[0]
@@ -258,8 +262,7 @@ class MetaTrader(Broker):
             positions = self.api.positions_get(symbol=instrument)
         else:
             positions = self.api.positions_get(group=group)
-        for position in positions:
-            return self.close_position(position)
+        return [self.close_position(position) for position in positions]
 
     def get_positions(self, as_dataframe=False):
         positions = self.api.positions_get()

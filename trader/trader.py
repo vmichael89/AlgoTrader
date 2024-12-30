@@ -32,7 +32,7 @@ class Trader:
                 available_brokers = ', '.join(cls.__name__ for cls in self.broker_names.values())
                 raise KeyError(f'`{broker}` not available in brokers: {available_brokers}')
 
-    def add_data(self, instruments, start=None, end=None, granularities='1H', prices='M', broker=None, days=7):
+    def add_data(self, instruments, start=None, end=None, granularities='1H', prices='M', days=7):
 
         today = datetime.datetime.utcnow().isoformat() + 'Z'
         seven_days_ago = (datetime.datetime.utcnow() - datetime.timedelta(days=days)).date().strftime('%Y-%m-%d')
@@ -93,8 +93,10 @@ class Trader:
         return position
 
     def change_position_sltp(self, position, sl=None, tp=None, magic=0, comment=""):
-        return self.broker.change_position_sltp(
+        position = self.broker.change_position_sltp(
             position=position, sl=sl, tp=tp, magic=magic, comment=comment)
+        self.positions.append(position)
+        return position
 
     def close_position(self, position, volume=None):
         return self.broker.close_position(position)
