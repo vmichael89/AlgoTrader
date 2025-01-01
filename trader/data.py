@@ -193,25 +193,3 @@ class TickData(Data):
         ]
 
         return graph_objs
-
-
-class DataStream:
-    def __init__(self, broker, instrument, frequency, callback):
-        self.broker = broker
-        self.instrument = instrument
-        self.frequency = frequency
-        self.callback = callback
-        self.running = False
-
-    def start(self):
-        self.running = True
-        threading.Thread(target=self.run).start()
-
-    def stop(self):
-        self.running = False
-
-    def run(self):
-        while self.running:
-            data = self.broker.get_data(self.instrument)
-            self.callback(data)
-            time.sleep(self.frequency)

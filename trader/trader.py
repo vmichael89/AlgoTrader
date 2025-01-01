@@ -4,9 +4,8 @@ import itertools
 import pandas as pd
 import plotly.graph_objects as go
 from .broker import Broker, OandaBroker, PolygonAPI, MetaTrader
-from .data import Data, DataStream
+from .data import Data
 import threading
-import time
 
 
 class Trader:
@@ -17,9 +16,11 @@ class Trader:
         self.brokers = {}
         self.broker = None
         self.data = []
+        self.indicators = []
         self.strategies = []
         self.positions = []
-        self.data_streams = {}
+        self.data_streams = []
+        self.stop_event = threading.Event()
 
     def add_broker(self, broker):
         if self.broker:
@@ -29,6 +30,7 @@ class Trader:
             if broker in self.broker_names:
                 self.brokers[broker] = self.broker_names[broker]()  # Create broker instance
                 self.broker = self.broker_names[broker]()
+                self.broker.trader = self
             else:
                 available_brokers = ', '.join(cls.__name__ for cls in self.broker_names.values())
                 raise KeyError(f'`{broker}` not available in brokers: {available_brokers}')
@@ -119,21 +121,53 @@ class Trader:
         # Loop through data, update indicators, and run strategies
         pass
 
-    def add_data_stream(self, instrument, frequency):
-        if instrument not in self.data_streams:
-            data_stream = DataStream(self.broker, instrument, frequency, self.on_new_data)
-            self.data_streams[instrument] = data_stream
-            data_stream.start()
-
-    def on_new_data(self, data):
-        for strategy in self.strategies:
-            if data.symbol in strategy.instruments:
-                strategy.on_new_data(data)
+    def add_data_stream(self, instrument, frequency=1):
+        """Add a data stream for the specified instrument."""
+        if self.broker:
+            self.data_streams.append([instrument, frequency, 0])
+        else:
+            raise ValueError("Broker instance must be added before adding data streams.")
 
     def run_live(self):
-        for strategy in self.strategies:
-            for instrument in strategy.instruments:
-                self.add_data_stream(instrument, strategy.frequency)
+        """Start all data streams in parallel."""
+        if not self.data_streams:
+            raise ValueError("No data streams added. Use add_data_stream to add streams.")
+        
+        def start_stream(instrument, frequency):
+            while not self.stop_event.is_set():
+                self.broker.stream_tick_data(instrument, frequency)
+        
+        threads = []
+        for instrument, frequency, _ in self.data_streams:
+            thread = threading.Thread(target=start_stream, args=(instrument, frequency))
+            thread.daemon = True  # Make the thread a daemon so it exits when the main program exits
+            threads.append(thread)
+            thread.start()
+        
+        try:
+            for thread in threads:
+                thread.join()
+        except KeyboardInterrupt:
+            self.stop_event.set()
+            print("Stopping all data streams...")
+
+    def stop_live(self):
+        """Stop all data streams."""
+        self.stop_event.set()
+        print("All data streams stopped.")
+
+    def on_new_data(self, instrument, frequency, data):
+        os.system("cls")
+        print(datetime.datetime.now())
+        for data_stream in self.data_streams:
+            if data_stream[0] == instrument:
+                data_stream[2] += len(data)
+                print(f'{data_stream[0]}: {data_stream[2]:3} total ticks | {len(data)} new ticks')
+            else:
+                print(f'{data_stream[0]}: {data_stream[2]:3} total ticks')
+        # for strategy in self.strategies:
+        #     if data.symbol in strategy.instruments:
+        #         strategy.on_new_data(data)
 
     def plot(self):
         figs = [data.plot() for data in self.data]

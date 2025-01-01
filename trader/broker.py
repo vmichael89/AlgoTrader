@@ -65,6 +65,7 @@ class OandaAPI(tpqoa.tpqoa):
 
 
 class Broker(ABC):
+    trader = None
 
     @classmethod
     def __repr__(cls):
@@ -115,6 +116,10 @@ class Broker(ABC):
         df_data = self._fetch_broker_tick_data(instrument, start, end)
         data = TickData(instrument, start, end, "tick", "BA", df_data)
         return data
+    
+    def stream_tick_data(self, instrument, frequency=1):
+        """Stream real-time data for the specified instrument."""
+        raise NotImplementedError()
 
     def market_order(self, instrument, order_size, sl=None, tp=None, magic=0, comment=""):
         raise NotImplementedError()
@@ -136,6 +141,7 @@ class Broker(ABC):
 
 
 class MetaTrader(Broker):
+    FTMO_TIME_ZONE = timezone(timedelta(hours=2))
 
     @property
     def COLUMN_MAPPING(self):
@@ -160,14 +166,14 @@ class MetaTrader(Broker):
 
     def _isoformat_to_ftmo_time(self, isoformat_time):
         # FTMO time (GMT+2) has to be a datetime object without timezone info.
-        as_utc_time = datetime.fromisoformat(isoformat_time).replace(tzinfo=timezone.utc)
-        ftmo_time = as_utc_time.astimezone(timezone(timedelta(hours=2)))
+        as_datetime = datetime.fromisoformat(isoformat_time)#.replace(tzinfo=timezone.utc)
+        ftmo_time = as_datetime.astimezone(self.FTMO_TIME_ZONE)
         ftmo_time = ftmo_time.replace(tzinfo=timezone.utc)
         return ftmo_time
 
     def _fetch_broker_tick_data(self, instrument, start, end=None):
         start_time = self._isoformat_to_ftmo_time(start)
-        end_time = self._isoformat_to_ftmo_time(end) if end else self._isoformat_to_ftmo_time(datetime.utcnow().isoformat())
+        end_time = self._isoformat_to_ftmo_time(end) if end else self._isoformat_to_ftmo_time(datetime.now().isoformat())
 
         ticks = self.api.copy_ticks_range(instrument, start_time, end_time, self.api.COPY_TICKS_ALL)
         df_ticks = pd.DataFrame(ticks)
@@ -177,6 +183,19 @@ class MetaTrader(Broker):
 
         df_ticks.drop(columns=['time', 'last', 'time_msc', 'flags', 'volume_real'], inplace=True)
         return df_ticks
+    
+    def stream_tick_data(self, instrument, frequency=1):
+        start_time = datetime.now().isoformat()
+        old_ticks = None
+        while not self.trader.stop_event.is_set():
+            df_ticks = self._fetch_broker_tick_data(instrument, start_time)
+            if (not df_ticks.empty) and (old_ticks is not None):
+                df_ticks = df_ticks.loc[~df_ticks.index.isin(old_ticks.index)]
+            if not df_ticks.empty:
+                old_ticks = df_ticks
+                start_time = df_ticks.index[-1].isoformat()
+                self.trader.on_new_data(instrument, frequency, df_ticks)
+            time.sleep(frequency)
 
     def _order_send(self, action, magic=None, order=None, symbol=None, volume=None, price=None, stoplimit=None, sl=None,
                     tp=None, deviation=None, type=None, type_filling=None, type_time=None, expiration=None, comment="",
