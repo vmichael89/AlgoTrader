@@ -1,11 +1,37 @@
 import os
 import datetime
 import itertools
+import inspect
 import pandas as pd
 import plotly.graph_objects as go
 from .broker import Broker, OandaBroker, PolygonAPI, MetaTrader
 from .data import Data
 import threading
+
+
+# def get_constructor_params(instance):
+#     """Return a tuple of key-value pairs for constructor parameters of an instance."""
+#     # Get the constructor signature
+#     init_signature = inspect.signature(instance.__class__.__init__)
+#     # Extract parameter names (skip 'self')
+#     param_names = list(init_signature.parameters.keys())[1:]
+#     # Collect only attributes matching constructor parameters
+#     params = [(name, getattr(instance, name, None)) for name in param_names]
+#     return tuple(params)
+
+def get_constructor_params(instance):
+    """
+    Return a tuple of key-value pairs for arguments passed to the constructor of an instance.
+    """
+    # Get the constructor signature
+    init_signature = inspect.signature(instance.__class__.__init__)
+    # Extract parameter names (skip 'self') and retrieve their values
+    params = [
+        (name, getattr(instance, name, None))  # Resolves kwargs and default values
+        for name in init_signature.parameters
+        if name != 'self'
+    ]
+    return tuple(params)
 
 
 class Trader:
@@ -84,8 +110,27 @@ class Trader:
         elif data:
             data.save()
 
-    def add_indicator(self, instrument, indicator, params: dict):
-        self.indicators.append(indicator(instrument, **params))
+    def add_data_stream(self, instrument, frequency=1):
+        """Add a data stream for the specified instrument."""
+        if self.broker:
+            self.data_streams.append((instrument, frequency))
+        else:
+            raise ValueError("Broker instance must be added before adding data streams.")
+
+    def add_indicator(self, indicator):
+        # Add an indicator if it's not already in the list
+        # Existence is checked by comparing the constructor parameters
+        indicator_params = get_constructor_params(indicator)
+        for ind in self.indicators:
+            if indicator_params == get_constructor_params(ind):
+                return ind
+        else:
+            self.indicators.append(indicator)
+            return indicator
+
+    def add_strategy(self, strategy):
+        self.strategies.append(strategy)
+        strategy.on_add_to_trader(self)
 
     def market_order(self, instrument, order_size, sl=None, tp=None, magic=0, comment=""):
         position = self.broker.market_order(
@@ -111,26 +156,22 @@ class Trader:
     def get_trades(self, as_dataframe=True):
         return self.broker.get_trades(as_dataframe=as_dataframe)
 
-    def add_strategy(self, strategy):
-        strategy.trader = self
-        self.strategies.append(strategy)
-
-    def backtest(self):
-        # Loop through data, update indicators, and run strategies
+    def backtest(self, start, end, granularity):
+        # Initialization
+        # load data needed to run all strategies
         pass
-
-    def add_data_stream(self, instrument, frequency=1):
-        """Add a data stream for the specified instrument."""
-        if self.broker:
-            self.data_streams.append([instrument, frequency, 0])
-        else:
-            raise ValueError("Broker instance must be added before adding data streams.")
 
     def run_live(self):
         """Start all data streams in parallel."""
+
+        # Initialize data streams needed for strategies
+        for strategy in self.strategies:
+            for instrument, frequency in strategy.data_streams:
+                self.add_data_stream(instrument, frequency)
+
         if not self.data_streams:
             raise ValueError("No data streams added. Use add_data_stream to add streams.")
-        
+
         def start_stream(instrument, frequency):
             while not self.stop_event.is_set():
                 self.broker.stream_tick_data(instrument, frequency)
