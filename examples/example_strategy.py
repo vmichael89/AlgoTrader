@@ -1,27 +1,18 @@
 import os
-import asyncio
-import pandas as pd
-import MetaTrader5 as mt5
-from datetime import datetime, timezone, timedelta
-
-import os
 os.chdir("../trader")
 from trader.trader import Trader
-from trader.risk_management import RiskManagement
-from trader.strategies import continuation_strat
+from trader.algos.directional_change import DirectionalChange
+# from trader.strategies import continuation_strat
 
 trader = Trader()
 trader.add_broker('mt5')
-trader.add_data_stream("ETHUSD", 1)
-trader.add_data_stream("BTCUSD", 1)
-trader.run_live()
-
-
-# trader.add_strategy(continuation_strat.Strategy("EURUSD"))
-
-# trader.risk_management = RiskManagement()
-#
-# trader.add_data("EURUSD", start="2024-12-22T22:00", granularities="tick")
-# trader.add_indicator('dc', sigma=0.001, high_colname='bid', low_colname='bid')
-
-# trader.close_all_positions()
+# trader.add_data_stream("ETHUSD", 1)
+trader.add_indicator("ETHUSD", DirectionalChange, params=dict(sigma=0.001, high_colname='bid', low_colname='bid'))
+# trader.add_strategy(continuation_strat.Strategy("ETHUSD"))
+# trader.run_live()
+trader.add_data("EURUSD", "2025-01-02", granularities="tick")
+dc = DirectionalChange("", 0.0008, "bid", "bid")
+dc.get_extremes(trader.data[0].df.tz_localize(None))
+trader.data[0].df.tz_localize(None).bid.plot()
+dc.extremes.extreme.plot()
+print(dc.extremes)
