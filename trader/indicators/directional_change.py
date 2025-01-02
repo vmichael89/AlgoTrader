@@ -17,12 +17,10 @@ class DirectionalChange(Indicator):
         self.low_colname = low_colname
         self.overshoots = pd.DataFrame(
             columns=['overshoot', 'type'],
-            index=pd.DatetimeIndex([],
-            name='datetime'))
+            index=pd.DatetimeIndex([], name='datetime', tz=None))
         self.extremes = pd.DataFrame(
             columns=['extreme', 'conf_time', 'type', 'total_price_movement', 'time_for_completion', 'retracement'],
-            index=pd.DatetimeIndex([],
-            name='datetime'))
+            index=pd.DatetimeIndex([], name='datetime', tz=None))
 
         self.up_zig = False
         self.down_zig = False
@@ -38,7 +36,11 @@ class DirectionalChange(Indicator):
             time = self.timestamp
         if not val:
             val = self.last_overshoot
+        if self.overshoots.empty and self.timezone:
+            time = time.tz_localize(None)
         self.overshoots.loc[time, self.OVERSHOOT_COL_NAME] = val
+        if self.overshoots.index.tz != self.timezone:
+            self.overshoots.index = self.overshoots.index.tz_localize(self.timezone)
 
     def save_extreme(self):
         # get value and index from last saved overshoot event
@@ -58,6 +60,8 @@ class DirectionalChange(Indicator):
             retracement = 0 if prev_total_price_movement == 0 else total_price_movement / prev_total_price_movement
 
         # save
+        if self.extremes.empty and self.timezone:
+            extreme_index = extreme_index.tz_localize(None)
         self.extremes.loc[extreme_index] = {
             'extreme': extreme_value,
             'conf_time': self.timestamp,
@@ -66,14 +70,19 @@ class DirectionalChange(Indicator):
             'time_for_completion': time_for_completion,
             'retracement': retracement
         }
+        if self.extremes.index.tz != self.timezone:
+            self.extremes.index = self.extremes.index.tz_localize(self.timezone)
 
     def get_extremes(self, df):
         # loop through df, omit everything except high and low
         for timestamp, row in df.iterrows():
-            self.process_data_point(timestamp, row[self.high_colname], row[self.low_colname])
+            self.process_data_point(timestamp, row)
 
-    def process_data_point(self, timestamp, high, low):
+    def process_data_point(self, timestamp, row):
+        high = row[self.high_colname]
+        low = row[self.low_colname]
         self.timestamp = timestamp
+        self.timezone = timestamp.tz
 
         if not self.initial_timestamp:
             self.initial_timestamp = timestamp

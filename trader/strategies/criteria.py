@@ -8,14 +8,14 @@ class CriteriaManager:
         self.criteria = criteria
         self.met_criteria = [False for _ in criteria]
 
-    def check(self):
+    def check(self, timestamp):
         for idx, criterion in enumerate(self.criteria):
             if not criterion.is_met:
                 # First criterion that is not met
-                if not criterion.check():
+                if not criterion.check(timestamp):
                     return False
                 else:
-                    # Criterion met first time, opportunity for notificatoin
+                    # Criterion met first time, opportunity for notification
                     self.met_criteria[idx] = True
 
         # All criteria met
@@ -26,25 +26,26 @@ class CriteriaManager:
 class Criterion:
     is_met: bool = False
 
-    def __post_init__(self):
-        pass
-
     @abstractmethod
-    def check(self):
+    def check(self, timestamp):
         return False
 
 
 class Low(Criterion):
 
-    def __init__(self, instrument, dc_sigma=0.0005):
-        self.dc_indicator = DirectionalChange(instrument, dc_sigma)
+    def __init__(self, instrument, dc_sigma=0.001):
+        self.dc_indicator = DirectionalChange(instrument, dc_sigma, 'bid', 'bid')
         super().__init__()
 
-    def check(self):
+    def check(self, timestamp):
         # Check if the latest extreme is a low
         extremes = self.dc_indicator.extremes
-        if not extremes.empty and extremes.iloc[-1]['type'] == 'bottom':
-            self.is_met = True
+        if not extremes.empty:
+            latest_extreme = extremes.iloc[-1]
+            if latest_extreme['type'] == 'bottom':
+                if latest_extreme['conf_time'] == timestamp:
+                    print("Extreme: ", extremes.to_string())
+                    self.is_met = True
         return self.is_met
 
 #

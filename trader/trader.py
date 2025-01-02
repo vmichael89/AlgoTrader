@@ -177,7 +177,7 @@ class Trader:
                 self.broker.stream_tick_data(instrument, frequency)
         
         threads = []
-        for instrument, frequency, _ in self.data_streams:
+        for instrument, frequency in self.data_streams:
             thread = threading.Thread(target=start_stream, args=(instrument, frequency))
             thread.daemon = True  # Make the thread a daemon so it exits when the main program exits
             threads.append(thread)
@@ -196,15 +196,17 @@ class Trader:
         print("All data streams stopped.")
 
     def on_new_data(self, instrument, frequency, data: pd.DataFrame):
-        for index, row in data.itterrows():
+        print(f"Number of new data points: {len(data)}")
+        for index, row in data.iterrows():
             # Update indicators
             for indicator in self.indicators:
-                indicator.process_data_point(row)
+                indicator.process_data_point(index, row)
 
             # Step through strategies
             for strategy in self.strategies:
-                if instrument in strategy.instruments:
-                    strategy.on_new_data(row)
+                if instrument == strategy.instrument:
+                    print(f"Timestamp: {index}, Bid: {row['bid']}, Ask: {row['ask']}")
+                    strategy.on_new_data(index, row)
 
     def plot(self):
         figs = [data.plot() for data in self.data]
