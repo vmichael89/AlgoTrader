@@ -84,10 +84,8 @@ class Trader:
         elif data:
             data.save()
 
-    def add_indicator(self, indicator, *args, **kwargs):
-        """Add a TALib-alike indicator in the form of (function, kwargs of the function)."""
-        for data in self.data:
-            data.add_indicator(indicator, *args, **kwargs)
+    def add_indicator(self, instrument, indicator, params: dict):
+        self.indicators.append(indicator(instrument, **params))
 
     def market_order(self, instrument, order_size, sl=None, tp=None, magic=0, comment=""):
         position = self.broker.market_order(
@@ -156,18 +154,16 @@ class Trader:
         self.stop_event.set()
         print("All data streams stopped.")
 
-    def on_new_data(self, instrument, frequency, data):
-        os.system("cls")
-        print(datetime.datetime.now())
-        for data_stream in self.data_streams:
-            if data_stream[0] == instrument:
-                data_stream[2] += len(data)
-                print(f'{data_stream[0]}: {data_stream[2]:3} total ticks | {len(data)} new ticks')
-            else:
-                print(f'{data_stream[0]}: {data_stream[2]:3} total ticks')
-        # for strategy in self.strategies:
-        #     if data.symbol in strategy.instruments:
-        #         strategy.on_new_data(data)
+    def on_new_data(self, instrument, frequency, data: pd.DataFrame):
+        for index, row in data.itterrows():
+            # Update indicators
+            for indicator in self.indicators:
+                indicator.process_data_point(row)
+
+            # Step through strategies
+            for strategy in self.strategies:
+                if instrument in strategy.instruments:
+                    strategy.on_new_data(row)
 
     def plot(self):
         figs = [data.plot() for data in self.data]

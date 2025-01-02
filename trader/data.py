@@ -2,9 +2,6 @@ import os
 import re
 import pandas as pd
 import plotly.graph_objects as go
-from .algos.directional_change import dc
-import threading
-import time
 
 
 class Data:
@@ -23,7 +20,6 @@ class Data:
         self.granularity = granularity
         self.price = price
         self.df = df
-        self.indicators = []  # Not implemented yet
 
     def __repr__(self):
         sanitized_symbol = re.sub(r'[<>:"/\\|?*]', '_', self.symbol)
@@ -92,16 +88,16 @@ class Data:
             pd.DataFrame(data={'open': o, 'high': h, 'low': l, 'close': c, 'volume': volume}, index=[time])
         ])
 
-    def add_indicator(self, indicator, *args, **kwargs):
-        """Add a TALib-alike indicator in the form of (function, kwargs of the function)."""
-        if indicator == 'dc':
-            # use trader library
-            dc(self.df, *args, **kwargs)
-        else:
-            # use ta library
-            self.df.ta(kind=indicator, *args, **kwargs, append=True)
-            if indicator == 'bbands':
-                self.df.drop(self.df.columns[[-2, -1]], axis=1, inplace=True)
+    # def add_indicator(self, indicator, *args, **kwargs):
+    #     """Add a TALib-alike indicator in the form of (function, kwargs of the function)."""
+    #     if indicator == 'dc':
+    #         # use trader library
+    #         dc(self.df, *args, **kwargs)
+    #     else:
+    #         # use ta library
+    #         self.df.ta(kind=indicator, *args, **kwargs, append=True)
+    #         if indicator == 'bbands':
+    #             self.df.drop(self.df.columns[[-2, -1]], axis=1, inplace=True)
 
     def plot_data(self):
         graph_obj = go.Candlestick(

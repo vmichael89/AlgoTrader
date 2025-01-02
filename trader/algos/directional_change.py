@@ -4,81 +4,123 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 
 
-def dc(df, sigma=0.001, high_colname='high', low_colname='low'):
+class DirectionalChange:
+    EXTREME_COL_NAME = 'extreme'
+    OVERSHOOT_COL_NAME = 'overshoot'
 
-    extreme_col = f'DC_{sigma}_extreme'
-    overshoot_col = f'DC_{sigma}_overshoot'
+    def __init__(self, instrument, sigma=0.001, high_colname='high', low_colname='low'):
+        self.instrument = instrument
+        self.sigma = sigma
+        self.high_colname = high_colname
+        self.low_colname = low_colname
+        self.overshoots = pd.DataFrame(
+            columns=['overshoot', 'type'],
+            index=pd.DatetimeIndex([],
+            name='datetime'))
+        self.extremes = pd.DataFrame(
+            columns=['extreme', 'conf_time', 'type', 'total_price_movement', 'time_for_completion', 'retracement'],
+            index=pd.DatetimeIndex([],
+            name='datetime'))
 
-    def save_overshoot(time=None, val=None):
+        self.up_zig = False
+        self.down_zig = False
+        self.last_overshoot = 0 
+        self.initial_timestamp = None
+        self.initial_high = None
+        self.initial_low = None
+        self.timestamp = None
+
+    def save_overshoot(self, time=None, val=None):
         """Saves `last_overshoot` at `timestamp` from outer scope if not specified"""
         if not time:
-            time = timestamp
+            time = self.timestamp
         if not val:
-            val = last_overshoot
-        df.loc[time, overshoot_col] = val
+            val = self.last_overshoot
+        self.overshoots.loc[time, self.OVERSHOOT_COL_NAME] = val
 
-    def save_extreme():
+    def save_extreme(self):
         # get value and index from last saved overshoot event
-        extreme_index = df[overshoot_col].dropna().index[-1]
-        extreme_value = df[overshoot_col].dropna().iloc[-1]
+        extreme_index = self.overshoots[self.OVERSHOOT_COL_NAME].index[-1]
+        extreme_value = self.overshoots[self.OVERSHOOT_COL_NAME].iloc[-1]
+
+        if self.extremes.empty:
+            total_price_movement = 0
+            time_for_completion = pd.Timedelta(0)
+            retracement = 0
+        else:
+            prev_index = self.extremes.index[-1]
+            prev_extreme = self.extremes.iloc[-1]['extreme']
+            prev_total_price_movement = self.extremes.iloc[-1]['total_price_movement']
+            total_price_movement = abs(extreme_value - prev_extreme)
+            time_for_completion = extreme_index - prev_index
+            retracement = 0 if prev_total_price_movement == 0 else total_price_movement / prev_total_price_movement
+
         # save
-        df.loc[extreme_index, extreme_col] = extreme_value
-        # df.loc[extreme_index, 'DC_conf_time'] = timestamp
+        self.extremes.loc[extreme_index] = {
+            'extreme': extreme_value,
+            'conf_time': self.timestamp,
+            'type': 'top' if self.down_zig else 'bottom',
+            'total_price_movement': total_price_movement,
+            'time_for_completion': time_for_completion,
+            'retracement': retracement
+        }
 
-    # Initializations
-    df[[extreme_col, overshoot_col]] = pd.NA
-    # df['DC_conf_time'] = pd.NaT
-    # df['DC_conf_time'] = df['DC_conf_time'].dt.tz_localize('UTC')
-    up_zig = False  # tracks if current trend is upwards
-    down_zig = False  # tracks if current trend is downwards
-    last_overshoot = 0  # compared to current high/low to determine overshoot events
-    initial_timestamp = df.index[0]  # only used in trend initialization (while up_zig==down_zig==False)
-    initial_high = df[high_colname].iloc[0]  # only used in trend initialization (while up_zig==down_zig==False)
-    initial_low = df[low_colname].iloc[0]  # only used in trend initialization (while up_zig==down_zig==False)
+    def get_extremes(self, df):
+        # loop through df, omit everything except high and low
+        for timestamp, row in df.iterrows():
+            self.process_data_point(timestamp, row[self.high_colname], row[self.low_colname])
 
-    # loop through df, omit everything except high and low
-    for timestamp, row in df.iterrows():
-        high = row[high_colname]
-        low = row[low_colname]
+    def process_data_point(self, timestamp, high, low):
+        self.timestamp = timestamp
+
+        if not self.initial_timestamp:
+            self.initial_timestamp = timestamp
+            self.initial_high = high
+            self.initial_low = low
+
         # trend initialization / wait for first overshoot event
-        if not (up_zig or down_zig):
-            if down_zig := low <= initial_high - sigma:
+        if not (self.up_zig or self.down_zig):
+            if low <= self.initial_high - self.sigma:
+                self.down_zig = True
                 # save first high as first overshoot and first extreme
-                save_overshoot(initial_timestamp, initial_high)
-                save_extreme()
+                self.save_overshoot(self.initial_timestamp, self.initial_high)
+                self.save_extreme()
                 # save time/val from current overshoot event
-                last_overshoot = low
-                save_overshoot()
-            elif up_zig := high >= initial_low + sigma:
+                self.last_overshoot = low
+                self.save_overshoot()
+            elif high >= self.initial_low + self.sigma:
+                self.up_zig = True
                 # save first low as first overshoot and first extreme
-                save_overshoot(initial_timestamp, initial_low)
-                save_extreme()
+                self.save_overshoot(self.initial_timestamp, self.initial_low)
+                self.save_extreme()
                 # save time/val from current overshoot event
-                last_overshoot = high
-                save_overshoot()
+                self.last_overshoot = high
+                self.save_overshoot()
 
-        elif up_zig:
-            if overshoot_event := high > last_overshoot:
-                last_overshoot = high
-                save_overshoot()
-            elif down_zig := low <= last_overshoot - sigma:
-                up_zig = False
-                save_extreme()
-                last_overshoot = low
-                save_overshoot()
+        elif self.up_zig:
+            if overshoot_event := high > self.last_overshoot:
+                self.last_overshoot = high
+                self.save_overshoot()
+            elif low <= self.last_overshoot - self.sigma:
+                self.down_zig = True
+                self.up_zig = False
+                self.save_extreme()
+                self.last_overshoot = low
+                self.save_overshoot()
 
-        elif down_zig:
-            if undershoot_event := low < last_overshoot:
-                last_overshoot = low
-                save_overshoot()
-            elif up_zig := high >= last_overshoot + sigma:
-                down_zig = False
-                save_extreme()
-                last_overshoot = high
-                save_overshoot()
+        elif self.down_zig:
+            if undershoot_event := low < self.last_overshoot:
+                self.last_overshoot = low
+                self.save_overshoot()
+            elif high >= self.last_overshoot + self.sigma:
+                self.up_zig = True
+                self.down_zig = False
+                self.save_extreme()
+                self.last_overshoot = high
+                self.save_overshoot()
 
 
-class DirectionalChange:
+class DirectionalChange2:
     def __init__(self, sigma):
         self.sigma = sigma
         self.line = None  # used to check if extremes have already been plotted
