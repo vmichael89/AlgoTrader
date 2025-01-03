@@ -156,10 +156,15 @@ class Trader:
     def get_trades(self, as_dataframe=True):
         return self.broker.get_trades(as_dataframe=as_dataframe)
 
-    def backtest(self, start, end, granularity):
+    def run_backtest(self, start, end):
         # Initialization
-        # load data needed to run all strategies
-        pass
+        for strategy in self.strategies:
+            instrument = strategy.instrument
+            self.add_data(instrument, start=start, end=end, granularities="tick")
+
+        # Run backtest
+        for data in self.data:
+            self.on_new_data(data.symbol, 0, data.df)
 
     def run_live(self):
         """Start all data streams in parallel."""
@@ -193,10 +198,9 @@ class Trader:
     def stop_live(self):
         """Stop all data streams."""
         self.stop_event.set()
-        print("All data streams stopped.")
 
     def on_new_data(self, instrument, frequency, data: pd.DataFrame):
-        print(f"Number of new data points: {len(data)}")
+        # print(f"Number of new data points: {len(data)}")
         for index, row in data.iterrows():
             # Update indicators
             for indicator in self.indicators:
@@ -205,7 +209,7 @@ class Trader:
             # Step through strategies
             for strategy in self.strategies:
                 if instrument == strategy.instrument:
-                    print(f"Timestamp: {index}, Bid: {row['bid']}, Ask: {row['ask']}")
+                    # print(f"Timestamp: {index}, Bid: {row['bid']}, Ask: {row['ask']}")
                     strategy.on_new_data(index, row)
 
     def plot(self):
