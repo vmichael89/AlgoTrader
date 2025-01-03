@@ -1,5 +1,5 @@
 from . import Strategy
-from . import CriteriaManager, Low
+from . import CriteriaManager, Extreme
 
 
 class ContinuationStrategy(Strategy):
@@ -16,7 +16,8 @@ class ContinuationStrategy(Strategy):
 
 		# Criteria to entry a trade
 		self.criteria_manger = CriteriaManager([
-			Low(instrument, dc_sigma=0.00003)
+			Extreme('bottom', instrument, dc_sigma=0.00003),
+			Extreme('top', instrument, dc_sigma=0.00003)
 			# criteria.LowerHigh(max_retracement=0.5),  # restriction must be passed to next criteria
 			# criteria.BreakOfRecentLow(by=0.05, update_highs_and_lows=True),
 		])

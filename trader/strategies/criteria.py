@@ -3,50 +3,66 @@ from abc import abstractmethod
 from ..indicators.directional_change import DirectionalChange
 
 
+class CriteriaChainTerminatedException(Exception):
+    pass
+
+
 class CriteriaManager:
     def __init__(self, criteria):
         self.criteria = criteria
         self.met_criteria = [False for _ in criteria]
 
     def check(self, timestamp):
-        for idx, criterion in enumerate(self.criteria):
-            if not criterion.is_met:
-                # First criterion that is not met
-                if not criterion.check(timestamp):
-                    return False
-                else:
-                    # Criterion met first time, opportunity for notification
-                    self.met_criteria[idx] = True
+        try:
+            next_criterion_idx = self.met_criteria.index(False)
+            self.met_criteria[next_criterion_idx] = self.criteria[next_criterion_idx].check(timestamp)
+            if all(self.met_criteria):
+                self._reset()
+                return True
+        except CriteriaChainTerminatedException:
+            self._reset()
+            return False
 
-        # All criteria met
-        return True
+    def _reset(self):
+        self.met_criteria = [False for _ in self.criteria]
 
 
-@dataclass
 class Criterion:
-    is_met: bool = False
 
     @abstractmethod
     def check(self, timestamp):
         return False
 
 
-class Low(Criterion):
+class Extreme(Criterion):
 
-    def __init__(self, instrument, dc_sigma=0.001):
+    def __init__(self, extreme_type, instrument, dc_sigma, max_retracement=None):
+        self.extreme_type = extreme_type
+        self.max_retracement = max_retracement
         self.dc_indicator = DirectionalChange(instrument, dc_sigma, 'bid', 'bid')
         super().__init__()
 
     def check(self, timestamp):
-        # Check if the latest extreme is a low
         extremes = self.dc_indicator.extremes
         if not extremes.empty:
             latest_extreme = extremes.iloc[-1]
-            if latest_extreme['type'] == 'bottom':
-                if latest_extreme['conf_time'] == timestamp:
+
+            is_new_extreme = latest_extreme['conf_time'] == timestamp
+            type_valid = latest_extreme['type'] == self.extreme_type
+            retracement_valid = (
+                    self.max_retracement is None or
+                    (latest_extreme['retracement'] < self.max_retracement)
+            )
+
+            if is_new_extreme and type_valid:
+
+                if retracement_valid:
                     print("Extreme: ", extremes.to_string())
-                    self.is_met = True
-        return self.is_met
+                    return True
+                else:
+                    raise CriteriaChainTerminatedException
+
+        return False
 
 #
 # @dataclass
