@@ -55,9 +55,9 @@ class DirectionalChange(Indicator):
             prev_index = self.extremes.index[-1]
             prev_extreme = self.extremes.iloc[-1]['extreme']
             prev_total_price_movement = self.extremes.iloc[-1]['total_price_movement']
-            total_price_movement = abs(extreme_value - prev_extreme)
+            total_price_movement = extreme_value - prev_extreme
             time_for_completion = extreme_index - prev_index
-            retracement = 0 if prev_total_price_movement == 0 else total_price_movement / prev_total_price_movement
+            retracement = 0 if prev_total_price_movement == 0 else abs(total_price_movement) / abs(prev_total_price_movement)
 
         # save
         if self.extremes.empty and self.timezone:
