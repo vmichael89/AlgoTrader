@@ -41,7 +41,7 @@ class Data:
         elif unit == 'Y':
             value = str(int(multiplier) * 356) + 'D'
         elif self.granularity == 'tick':
-            value = '1S'
+            value = '1s'
         else:
             value = self.granularity
         return pd.to_timedelta(value)

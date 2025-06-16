@@ -145,12 +145,32 @@ class MetaTrader(Broker):
 
     @property
     def COLUMN_MAPPING(self):
-        return None
+        return {}
 
     @property
     def GRANULARITY_MAP(self):
         return {
-            "tick": "tick"
+            '1min': self.api.TIMEFRAME_M1,
+            '2min': self.api.TIMEFRAME_M2,
+            '3min': self.api.TIMEFRAME_M3,
+            '4min': self.api.TIMEFRAME_M4,
+            '5min': self.api.TIMEFRAME_M5,
+            '6min': self.api.TIMEFRAME_M6,
+            '10min': self.api.TIMEFRAME_M10,
+            '12min': self.api.TIMEFRAME_M12,
+            '15min': self.api.TIMEFRAME_M15,
+            '20min': self.api.TIMEFRAME_M20,
+            '30min': self.api.TIMEFRAME_M30,
+            '1H': self.api.TIMEFRAME_H1,
+            '2H': self.api.TIMEFRAME_H2,
+            '3H': self.api.TIMEFRAME_H3,
+            '4H': self.api.TIMEFRAME_H4,
+            '6H': self.api.TIMEFRAME_H6,
+            '8H': self.api.TIMEFRAME_H8,
+            '12H': self.api.TIMEFRAME_H12,
+            '1D': self.api.TIMEFRAME_D1,
+            '1W': self.api.TIMEFRAME_W1,
+            '1M': self.api.TIMEFRAME_MN1
         }
 
     def __init__(self, user="FTMO_DEMO"):
@@ -163,6 +183,8 @@ class MetaTrader(Broker):
         password = os.environ[f"{user}_PASSWORD"]
         server = os.environ[f"{user}_SERVER"]
         mt5.login(login=login, password=password, server=server)
+        if not mt5.account_info():
+            raise Exception(f"Failed to connect to MetaTrader 5: {mt5.last_error()}")
 
     def _isoformat_to_ftmo_time(self, isoformat_time):
         # FTMO time (GMT+2) has to be a datetime object without timezone info.
@@ -171,6 +193,33 @@ class MetaTrader(Broker):
         ftmo_time = ftmo_time.replace(tzinfo=timezone.utc)
         return ftmo_time
 
+    def _fetch_broker_data(self, instrument, start, end, granularity, price):
+        start_time = self._isoformat_to_ftmo_time(start)
+        end_time = self._isoformat_to_ftmo_time(end) if end else self._isoformat_to_ftmo_time(datetime.now().isoformat())
+
+        # Get the number of candles to fetch
+        if granularity in self.GRANULARITY_MAP:
+            period = self.GRANULARITY_MAP[granularity]
+        else:
+            raise ValueError(f"Granularity {granularity} is not valid or not supported.")
+
+        # Get the data
+        df_data = self.api.copy_rates_range(instrument, period, start_time, end_time)
+        df_data = pd.DataFrame(df_data)
+        df_data['datetime'] = pd.to_datetime(df_data['time'], unit='s')
+        df_data['datetime'] = df_data['datetime'].dt.tz_localize('Etc/GMT-3')
+        df_data.set_index('datetime', inplace=True)
+
+        if price == 'B':
+            pass
+        elif price == 'A':
+            point_value = self.api.symbol_info(instrument).point
+            for col in ['open', 'high', 'low', 'close']:
+                df_data[col] = df_data[col] + df_data['spread'] * point_value
+
+        df_data.drop(columns=['time', 'real_volume', 'spread'], inplace=True)
+        return df_data
+
     def _fetch_broker_tick_data(self, instrument, start, end=None):
         start_time = self._isoformat_to_ftmo_time(start)
         end_time = self._isoformat_to_ftmo_time(end) if end else self._isoformat_to_ftmo_time(datetime.now().isoformat())
@@ -178,7 +227,7 @@ class MetaTrader(Broker):
         ticks = self.api.copy_ticks_range(instrument, start_time, end_time, self.api.COPY_TICKS_ALL)
         df_ticks = pd.DataFrame(ticks)
         df_ticks['datetime'] = pd.to_datetime(df_ticks['time_msc'], unit='ms')
-        df_ticks['datetime'] = df_ticks['datetime'].dt.tz_localize('Etc/GMT-2')
+        df_ticks['datetime'] = df_ticks['datetime'].dt.tz_localize('Etc/GMT-3')
         df_ticks.set_index('datetime', inplace=True)
 
         df_ticks.drop(columns=['time', 'last', 'time_msc', 'flags', 'volume_real'], inplace=True)

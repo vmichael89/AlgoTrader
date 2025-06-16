@@ -11,7 +11,7 @@ tdr = Trader()
 # Layout with a hidden store
 app.layout = html.Div([
     html.Button(id='add-data-button', children="Add Data"),
-    dcc.Dropdown([el[1] for el in tdr.broker.api.get_instruments()], 'EUR_USD', id='instruments-dropdown'),
+    # dcc.Dropdown([el[1] for el in tdr.broker.api.get_instruments()], 'EUR_USD', id='instruments-dropdown'),
     dcc.Interval(id='interval-component', interval=1000, n_intervals=0),
     dcc.Store(id='data-store'),
     html.Div(id='candlestick-subplot'),
